@@ -553,14 +553,6 @@
         <div class="header-controls">
             <select class="preset-select" id="presetSelect">
                 <option value="">-- Load Problem --</option>
-                <optgroup label="Built-in Presets" id="builtinGroup">
-                    <option value="diameter">Tree Diameter</option>
-                    <option value="maxDepth">Max Depth</option>
-                    <option value="sumTree">Sum of Tree</option>
-                    <option value="countNodes">Count Nodes</option>
-                    <option value="isBalanced">Is Balanced</option>
-                    <option value="maxPathSum">Max Path Sum</option>
-                </optgroup>
                 <optgroup label="My Problems" id="customGroup">
                 </optgroup>
             </select>
@@ -817,101 +809,7 @@
             return customProblems;
         }
         
-        // Presets (built-in)
-        const presets = {
-            diameter: {
-                tree: '[1, 2, 3, 4, 5, null, null]',
-                globals: '{"maxD": 0}',
-                code: `// Returns height, tracks diameter in globals.maxD
-function height(node, globals) {
-    if (!node) return -1;
-    
-    let left = height(node.left, globals);
-    let right = height(node.right, globals);
-    
-    // Diameter through this node
-    let diameterHere = left + right + 2;
-    globals.maxD = Math.max(globals.maxD, diameterHere);
-    
-    // Return height to parent
-    return Math.max(left, right) + 1;
-}`
-            },
-            maxDepth: {
-                tree: '[3, 9, 20, null, null, 15, 7]',
-                globals: '{}',
-                code: `// Returns the maximum depth of the tree
-function maxDepth(node, globals) {
-    if (!node) return 0;
-    
-    let left = maxDepth(node.left, globals);
-    let right = maxDepth(node.right, globals);
-    
-    return Math.max(left, right) + 1;
-}`
-            },
-            sumTree: {
-                tree: '[1, 2, 3, 4, 5, 6, 7]',
-                globals: '{}',
-                code: `// Returns the sum of all node values
-function sumTree(node, globals) {
-    if (!node) return 0;
-    
-    let left = sumTree(node.left, globals);
-    let right = sumTree(node.right, globals);
-    
-    return node.val + left + right;
-}`
-            },
-            countNodes: {
-                tree: '[1, 2, 3, 4, 5, null, 6]',
-                globals: '{}',
-                code: `// Returns count of nodes in tree
-function countNodes(node, globals) {
-    if (!node) return 0;
-    
-    let left = countNodes(node.left, globals);
-    let right = countNodes(node.right, globals);
-    
-    return 1 + left + right;
-}`
-            },
-            isBalanced: {
-                tree: '[1, 2, 3, 4, 5, null, null, 8]',
-                globals: '{"balanced": true}',
-                code: `// Check if tree is balanced (height diff <= 1)
-function checkHeight(node, globals) {
-    if (!node) return 0;
-    
-    let left = checkHeight(node.left, globals);
-    let right = checkHeight(node.right, globals);
-    
-    if (Math.abs(left - right) > 1) {
-        globals.balanced = false;
-    }
-    
-    return Math.max(left, right) + 1;
-}`
-            },
-            maxPathSum: {
-                tree: '[10, 2, 10, 20, 1, null, -25, null, null, null, null, 3, 4]',
-                globals: '{"maxSum": -Infinity}',
-                code: `// Find maximum path sum through any path
-function maxGain(node, globals) {
-    if (!node) return 0;
-    
-    let left = Math.max(0, maxGain(node.left, globals));
-    let right = Math.max(0, maxGain(node.right, globals));
-    
-    // Path through this node
-    let pathSum = node.val + left + right;
-    globals.maxSum = Math.max(globals.maxSum, pathSum);
-    
-    // Return max gain if continuing path
-    return node.val + Math.max(left, right);
-}`
-            }
-        };
+        // No built-in presets - user adds their own via Save
         
         // Tree node class
         class TreeNode {
@@ -1141,40 +1039,38 @@ function maxGain(node, globals) {
         let currentSelectedProblem = null;
         let cachedProblems = {};
         
-        // Load preset or custom problem
+        // Load custom problem
         presetSelect.addEventListener('change', async () => {
             const value = presetSelect.value;
             currentSelectedProblem = value;
-            
-            // Show/hide delete button based on whether it's a custom problem
+
+            // Show/hide delete button
             deleteBtn.style.display = value.startsWith('custom_') ? 'inline-block' : 'none';
-            
+
             // Problem info section
             const problemInfoSection = document.getElementById('problemInfoSection');
             const problemLink = document.getElementById('problemLink');
             const problemNotesDisplay = document.getElementById('problemNotesDisplay');
-            
+
             if (value.startsWith('custom_')) {
-                // Load custom problem
                 const problemId = value.replace('custom_', '');
                 const problem = cachedProblems[problemId];
-                
+
                 if (problem) {
                     treeInput.value = problem.tree;
                     globalsInput.value = problem.globals;
                     codeInput.value = problem.code;
-                    
-                    // Show problem info if there's URL or notes
+
                     if (problem.url || problem.notes) {
                         problemInfoSection.style.display = 'block';
-                        
+
                         if (problem.url) {
                             problemLink.href = problem.url;
                             problemLink.style.display = 'inline';
                         } else {
                             problemLink.style.display = 'none';
                         }
-                        
+
                         problemNotesDisplay.textContent = problem.notes || '';
                         problemNotesDisplay.style.display = problem.notes ? 'block' : 'none';
                     } else {
@@ -1182,16 +1078,7 @@ function maxGain(node, globals) {
                     }
                 }
             } else {
-                // Hide problem info for built-in presets
                 problemInfoSection.style.display = 'none';
-                
-                if (presets[value]) {
-                    // Load built-in preset
-                    const preset = presets[value];
-                    treeInput.value = preset.tree;
-                    globalsInput.value = preset.globals;
-                    codeInput.value = preset.code;
-                }
             }
         });
         
