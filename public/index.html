@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recursive Algorithm Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        
+        /* Header */
+        .header {
+            background: #16213e;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2d3748;
+        }
+        .header h1 {
+            color: #7fc8f8;
+            font-size: 20px;
+        }
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .preset-select {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            color: #eee;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .preset-select:focus {
+            outline: none;
+            border-color: #7fc8f8;
+        }
+        .header-btn {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            color: #eee;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .header-btn:hover {
+            background: #4a5568;
+        }
+        .header-btn.save {
+            background: #2d5a3d;
+            border-color: #3d7a5d;
+        }
+        .header-btn.save:hover {
+            background: #3d7a5d;
+        }
+        .header-btn.delete {
+            background: #5a2d2d;
+            border-color: #7a3d3d;
+        }
+        .header-btn.delete:hover {
+            background: #7a3d3d;
+        }
+        .header-divider {
+            width: 1px;
+            height: 24px;
+            background: #4a5568;
+            margin: 0 5px;
+        }
+        
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 25px;
+            width: 400px;
+            max-width: 90vw;
+            border: 1px solid #2d3748;
+        }
+        .modal h2 {
+            color: #7fc8f8;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        .modal-input {
+            width: 100%;
+            background: #1a1a2e;
+            border: 1px solid #2d3748;
+            color: #eee;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .modal-input:focus {
+            outline: none;
+            border-color: #7fc8f8;
+        }
+        .modal-label {
+            color: #a0aec0;
+            font-size: 12px;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .modal-btn.cancel {
+            background: #2d3748;
+            color: #eee;
+        }
+        .modal-btn.cancel:hover {
+            background: #4a5568;
+        }
+        .modal-btn.confirm {
+            background: #7fc8f8;
+            color: #1a1a2e;
+            font-weight: 600;
+        }
+        .modal-btn.confirm:hover {
+            background: #a8d8f8;
+        }
+        .modal-btn.danger {
+            background: #e53e3e;
+            color: #fff;
+        }
+        .modal-btn.danger:hover {
+            background: #fc5555;
+        }
+        
+        /* Custom problem indicator */
+        .custom-indicator {
+            background: #c792ea;
+            color: #1a1a2e;
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+        
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #2d5a3d;
+            color: #c3e88d;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 13px;
+            z-index: 1001;
+            transition: transform 0.3s ease;
+            border: 1px solid #3d7a5d;
+        }
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.error {
+            background: #5a2d2d;
+            color: #ff8a8a;
+            border-color: #7a3d3d;
+        }
+        
+        /* Main Layout */
+        .main-container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: calc(100vh - 60px);
+        }
+        
+        /* Left Panel - Editor */
+        .editor-panel {
+            background: #0d1117;
+            border-right: 1px solid #2d3748;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .editor-section {
+            padding: 15px;
+            border-bottom: 1px solid #2d3748;
+        }
+        .editor-section:last-child {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .section-title {
+            color: #f8a07f;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tree-input {
+            background: #1a1a2e;
+            border: 1px solid #2d3748;
+            color: #eee;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 12px;
+            width: 100%;
+            resize: none;
+        }
+        .tree-input:focus {
+            outline: none;
+            border-color: #7fc8f8;
+        }
+        .code-editor {
+            flex: 1;
+            background: #1a1a2e;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .code-textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #eee;
+            padding: 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            resize: none;
+            width: 100%;
+        }
+        .code-textarea:focus {
+            outline: none;
+        }
+        .run-btn {
+            background: #7fc8f8;
+            border: none;
+            color: #1a1a2e;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .run-btn:hover {
+            background: #a8d8f8;
+        }
+        .help-text {
+            color: #636d83;
+            font-size: 10px;
+            margin-top: 6px;
+            line-height: 1.5;
+        }
+        
+        /* Right Panel - Visualization */
+        .viz-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        /* Controls */
+        .controls {
+            background: #16213e;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px solid #2d3748;
+        }
+        .btn {
+            background: #2d3748;
+            border: none;
+            color: #eee;
+            padding: 8px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            background: #4a5568;
+        }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .btn.primary {
+            background: #7fc8f8;
+            color: #1a1a2e;
+            font-weight: 600;
+        }
+        .btn.primary:hover:not(:disabled) {
+            background: #a8d8f8;
+        }
+        .step-info {
+            color: #888;
+            font-size: 12px;
+            margin-left: auto;
+        }
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #888;
+            font-size: 12px;
+        }
+        .speed-slider {
+            width: 80px;
+            accent-color: #7fc8f8;
+        }
+        
+        /* Viz Content */
+        .viz-content {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 15px;
+            padding: 15px;
+            overflow: hidden;
+        }
+        .viz-card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .viz-card-title {
+            color: #f8a07f;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        
+        /* Tree Visualization */
+        .tree-viz {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+        .tree-svg {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .tree-node circle {
+            transition: all 0.3s ease;
+        }
+        .tree-node text {
+            font-family: 'Monaco', monospace;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .tree-node.active circle {
+            stroke: #fff;
+            stroke-width: 3;
+            filter: drop-shadow(0 0 8px rgba(127, 200, 248, 0.8));
+        }
+        .tree-node.returning circle {
+            stroke: #c3e88d;
+            stroke-width: 3;
+            filter: drop-shadow(0 0 8px rgba(195, 232, 141, 0.8));
+        }
+        .tree-node.completed circle {
+            opacity: 0.5;
+        }
+        .tree-edge {
+            stroke: #4a5568;
+            stroke-width: 2;
+            transition: all 0.3s ease;
+        }
+        .tree-edge.active {
+            stroke: #7fc8f8;
+            stroke-width: 3;
+        }
+        
+        /* Call Stack */
+        .stack-container {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .stack-frame {
+            background: #1a1a2e;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            border-left: 3px solid #4a5568;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        .stack-frame.active {
+            border-left-color: #7fc8f8;
+            background: rgba(127, 200, 248, 0.1);
+        }
+        .stack-frame.returning {
+            border-left-color: #c3e88d;
+            background: rgba(195, 232, 141, 0.1);
+        }
+        .stack-frame .call {
+            color: #7fc8f8;
+            font-weight: 600;
+        }
+        .stack-frame .vars {
+            color: #a0aec0;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .stack-empty {
+            color: #636d83;
+            font-style: italic;
+            font-size: 12px;
+        }
+        
+        /* Variables */
+        .vars-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            flex: 1;
+            align-content: start;
+            overflow-y: auto;
+        }
+        .var-box {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+        .var-box .label {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        .var-box .value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #7fc8f8;
+            margin-top: 4px;
+            word-break: break-all;
+        }
+        .var-box.highlight .value {
+            color: #c3e88d;
+        }
+        .var-box.updated {
+            animation: pulse 0.4s ease;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        /* Output / Trace Log */
+        .trace-log {
+            flex: 1;
+            background: #1a1a2e;
+            border-radius: 6px;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+        .trace-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid #2d3748;
+        }
+        .trace-entry:last-child {
+            border-bottom: none;
+        }
+        .trace-call {
+            color: #82aaff;
+        }
+        .trace-return {
+            color: #c3e88d;
+        }
+        .trace-update {
+            color: #f78c6c;
+        }
+        .trace-arrow {
+            color: #636d83;
+        }
+        
+        /* Error display */
+        .error-msg {
+            background: rgba(255, 100, 100, 0.1);
+            border: 1px solid #ff6464;
+            border-radius: 6px;
+            padding: 12px;
+            color: #ff6464;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔄 Recursive Algorithm Visualizer</h1>
+        <div class="header-controls">
+            <select class="preset-select" id="presetSelect">
+                <option value="">-- Load Problem --</option>
+                <optgroup label="Built-in Presets" id="builtinGroup">
+                    <option value="diameter">Tree Diameter</option>
+                    <option value="maxDepth">Max Depth</option>
+                    <option value="sumTree">Sum of Tree</option>
+                    <option value="countNodes">Count Nodes</option>
+                    <option value="isBalanced">Is Balanced</option>
+                    <option value="maxPathSum">Max Path Sum</option>
+                </optgroup>
+                <optgroup label="My Problems" id="customGroup">
+                </optgroup>
+            </select>
+            <button class="header-btn save" id="saveBtn" title="Save current problem">💾 Save</button>
+            <button class="header-btn delete" id="deleteBtn" title="Delete selected problem" style="display:none;">🗑️ Delete</button>
+            <div class="header-divider"></div>
+            <button class="header-btn" id="exportBtn" title="Export all problems to file">📤 Export</button>
+            <button class="header-btn" id="importBtn" title="Import problems from file">📥 Import</button>
+            <input type="file" id="importFile" accept=".json" style="display: none;">
+        </div>
+    </div>
+    
+    <!-- Save Modal -->
+    <div class="modal-overlay" id="saveModal">
+        <div class="modal">
+            <h2>💾 Save Problem</h2>
+            <label class="modal-label">Problem Name</label>
+            <input type="text" class="modal-input" id="problemName" placeholder="e.g., LC 543 - Diameter of Binary Tree">
+            <label class="modal-label">LeetCode URL (optional)</label>
+            <input type="text" class="modal-input" id="problemUrl" placeholder="https://leetcode.com/problems/...">
+            <label class="modal-label">Notes (optional)</label>
+            <textarea class="modal-input" id="problemNotes" rows="3" placeholder="Key insights, edge cases, etc."></textarea>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="cancelSave">Cancel</button>
+                <button class="modal-btn confirm" id="confirmSave">Save Problem</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal">
+            <h2>🗑️ Delete Problem</h2>
+            <p style="color: #a0aec0; margin-bottom: 15px;">Are you sure you want to delete "<span id="deleteTargetName"></span>"?</p>
+            <p style="color: #888; font-size: 12px;">This cannot be undone.</p>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="cancelDelete">Cancel</button>
+                <button class="modal-btn danger" id="confirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import Modal -->
+    <div class="modal-overlay" id="importModal">
+        <div class="modal">
+            <h2>📥 Import Problems</h2>
+            <p style="color: #a0aec0; margin-bottom: 15px;">Found <span id="importCount">0</span> problems to import:</p>
+            <div id="importPreview" style="max-height: 200px; overflow-y: auto; background: #1a1a2e; border-radius: 6px; padding: 10px; margin-bottom: 15px;"></div>
+            <label style="color: #a0aec0; font-size: 12px; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="importMerge" checked>
+                Merge with existing problems (uncheck to replace all)
+            </label>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="cancelImport">Cancel</button>
+                <button class="modal-btn confirm" id="confirmImport">Import</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+    
+    <div class="main-container">
+        <!-- Editor Panel -->
+        <div class="editor-panel">
+            <div class="editor-section">
+                <div class="section-title">Tree Structure</div>
+                <textarea class="tree-input" id="treeInput" rows="3" placeholder="e.g. [1, 2, 3, 4, 5]">[1, 2, 3, 4, 5, null, null]</textarea>
+                <div class="help-text">Array format (level-order). Use null for empty nodes.</div>
+            </div>
+            
+            <div class="editor-section">
+                <div class="section-title">
+                    Global Variables
+                    <span style="color: #636d83; font-size: 10px; text-transform: none;">JSON format</span>
+                </div>
+                <textarea class="tree-input" id="globalsInput" rows="2" placeholder='{"maxD": 0}'></textarea>
+            </div>
+            
+            <!-- Problem Info (shown when custom problem is loaded) -->
+            <div class="editor-section" id="problemInfoSection" style="display: none; background: #1e2a4a;">
+                <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    Problem Info
+                    <a href="#" id="problemLink" target="_blank" style="color: #7fc8f8; font-size: 11px; text-decoration: none; text-transform: none;">Open on LeetCode →</a>
+                </div>
+                <div id="problemNotesDisplay" style="color: #a0aec0; font-size: 12px; line-height: 1.6; white-space: pre-wrap;"></div>
+            </div>
+            
+            <div class="editor-section">
+                <div class="section-title">Recursive Function</div>
+                <div class="code-editor">
+                    <textarea class="code-textarea" id="codeInput" spellcheck="false"></textarea>
+                    <button class="run-btn" id="runBtn">▶ Run Visualization</button>
+                </div>
+                <div class="help-text">
+                    Use <code>node.val</code>, <code>node.left</code>, <code>node.right</code><br>
+                    Use <code>globals.varName</code> for tracked variables<br>
+                    The function receives (node, globals) as parameters
+                </div>
+                <div id="errorDisplay"></div>
+            </div>
+        </div>
+        
+        <!-- Visualization Panel -->
+        <div class="viz-panel">
+            <div class="controls">
+                <button class="btn" id="prevBtn" disabled>← Prev</button>
+                <button class="btn primary" id="nextBtn" disabled>Next →</button>
+                <button class="btn" id="playBtn" disabled>▶ Play</button>
+                <button class="btn" id="resetBtn" disabled>Reset</button>
+                <div class="speed-control">
+                    <span>Speed:</span>
+                    <input type="range" class="speed-slider" id="speedSlider" min="1" max="10" value="5">
+                </div>
+                <div class="step-info">
+                    Step <span id="stepNum">0</span> / <span id="totalSteps">0</span>
+                </div>
+            </div>
+            
+            <div class="viz-content">
+                <!-- Tree -->
+                <div class="viz-card">
+                    <div class="viz-card-title">Tree</div>
+                    <div class="tree-viz" id="treeViz">
+                        <svg class="tree-svg" id="treeSvg"></svg>
+                    </div>
+                </div>
+                
+                <!-- Call Stack -->
+                <div class="viz-card">
+                    <div class="viz-card-title">Call Stack</div>
+                    <div class="stack-container" id="callStack">
+                        <div class="stack-empty">Run to see call stack</div>
+                    </div>
+                </div>
+                
+                <!-- Variables -->
+                <div class="viz-card">
+                    <div class="viz-card-title">Global Variables</div>
+                    <div class="vars-grid" id="varsGrid">
+                        <div class="stack-empty">No variables defined</div>
+                    </div>
+                </div>
+                
+                <!-- Trace Log -->
+                <div class="viz-card">
+                    <div class="viz-card-title">Execution Trace</div>
+                    <div class="trace-log" id="traceLog">
+                        <div class="stack-empty">Run to see trace</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API base URL - change this if deploying elsewhere
+        const API_URL = '/api';
+        
+        // Load custom problems from API
+        async function loadCustomProblems() {
+            try {
+                const response = await fetch(`${API_URL}/problems`);
+                if (!response.ok) throw new Error('Failed to load');
+                const problems = await response.json();
+                // Convert array to object keyed by id for compatibility
+                const problemsObj = {};
+                problems.forEach(p => problemsObj[p.id] = p);
+                return problemsObj;
+            } catch (e) {
+                console.error('Error loading problems:', e);
+                return {};
+            }
+        }
+        
+        // Save a single problem to API
+        async function saveProblem(problem) {
+            try {
+                const response = await fetch(`${API_URL}/problems`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(problem)
+                });
+                if (!response.ok) throw new Error('Failed to save');
+                return await response.json();
+            } catch (e) {
+                console.error('Error saving problem:', e);
+                showToast('Error saving problem', true);
+                return null;
+            }
+        }
+        
+        // Delete a problem via API
+        async function deleteProblem(id) {
+            try {
+                const response = await fetch(`${API_URL}/problems/${id}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) throw new Error('Failed to delete');
+                return true;
+            } catch (e) {
+                console.error('Error deleting problem:', e);
+                showToast('Error deleting problem', true);
+                return false;
+            }
+        }
+        
+        // Import problems via API
+        async function importProblems(problems, merge = true) {
+            try {
+                const response = await fetch(`${API_URL}/problems/import`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ problems, merge })
+                });
+                if (!response.ok) throw new Error('Failed to import');
+                return await response.json();
+            } catch (e) {
+                console.error('Error importing problems:', e);
+                showToast('Error importing problems', true);
+                return null;
+            }
+        }
+        
+        // Show toast notification
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.toggle('error', isError);
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+        
+        // Populate custom problems dropdown
+        async function populateCustomProblems() {
+            const customGroup = document.getElementById('customGroup');
+            const customProblems = await loadCustomProblems();
+            
+            customGroup.innerHTML = '';
+            
+            const problemIds = Object.keys(customProblems);
+            if (problemIds.length === 0) {
+                customGroup.innerHTML = '<option disabled>No saved problems yet</option>';
+            } else {
+                problemIds.forEach(id => {
+                    const problem = customProblems[id];
+                    const option = document.createElement('option');
+                    option.value = `custom_${id}`;
+                    option.textContent = problem.name;
+                    customGroup.appendChild(option);
+                });
+            }
+            
+            return customProblems;
+        }
+        
+        // Presets (built-in)
+        const presets = {
+            diameter: {
+                tree: '[1, 2, 3, 4, 5, null, null]',
+                globals: '{"maxD": 0}',
+                code: `// Returns height, tracks diameter in globals.maxD
+function height(node, globals) {
+    if (!node) return -1;
+    
+    let left = height(node.left, globals);
+    let right = height(node.right, globals);
+    
+    // Diameter through this node
+    let diameterHere = left + right + 2;
+    globals.maxD = Math.max(globals.maxD, diameterHere);
+    
+    // Return height to parent
+    return Math.max(left, right) + 1;
+}`
+            },
+            maxDepth: {
+                tree: '[3, 9, 20, null, null, 15, 7]',
+                globals: '{}',
+                code: `// Returns the maximum depth of the tree
+function maxDepth(node, globals) {
+    if (!node) return 0;
+    
+    let left = maxDepth(node.left, globals);
+    let right = maxDepth(node.right, globals);
+    
+    return Math.max(left, right) + 1;
+}`
+            },
+            sumTree: {
+                tree: '[1, 2, 3, 4, 5, 6, 7]',
+                globals: '{}',
+                code: `// Returns the sum of all node values
+function sumTree(node, globals) {
+    if (!node) return 0;
+    
+    let left = sumTree(node.left, globals);
+    let right = sumTree(node.right, globals);
+    
+    return node.val + left + right;
+}`
+            },
+            countNodes: {
+                tree: '[1, 2, 3, 4, 5, null, 6]',
+                globals: '{}',
+                code: `// Returns count of nodes in tree
+function countNodes(node, globals) {
+    if (!node) return 0;
+    
+    let left = countNodes(node.left, globals);
+    let right = countNodes(node.right, globals);
+    
+    return 1 + left + right;
+}`
+            },
+            isBalanced: {
+                tree: '[1, 2, 3, 4, 5, null, null, 8]',
+                globals: '{"balanced": true}',
+                code: `// Check if tree is balanced (height diff <= 1)
+function checkHeight(node, globals) {
+    if (!node) return 0;
+    
+    let left = checkHeight(node.left, globals);
+    let right = checkHeight(node.right, globals);
+    
+    if (Math.abs(left - right) > 1) {
+        globals.balanced = false;
+    }
+    
+    return Math.max(left, right) + 1;
+}`
+            },
+            maxPathSum: {
+                tree: '[10, 2, 10, 20, 1, null, -25, null, null, null, null, 3, 4]',
+                globals: '{"maxSum": -Infinity}',
+                code: `// Find maximum path sum through any path
+function maxGain(node, globals) {
+    if (!node) return 0;
+    
+    let left = Math.max(0, maxGain(node.left, globals));
+    let right = Math.max(0, maxGain(node.right, globals));
+    
+    // Path through this node
+    let pathSum = node.val + left + right;
+    globals.maxSum = Math.max(globals.maxSum, pathSum);
+    
+    // Return max gain if continuing path
+    return node.val + Math.max(left, right);
+}`
+            }
+        };
+        
+        // Tree node class
+        class TreeNode {
+            constructor(val, id) {
+                this.val = val;
+                this.id = id;
+                this.left = null;
+                this.right = null;
+                this.x = 0;
+                this.y = 0;
+            }
+        }
+        
+        // Build tree from array
+        function buildTree(arr) {
+            if (!arr || arr.length === 0 || arr[0] === null) return null;
+            
+            const root = new TreeNode(arr[0], 0);
+            const queue = [root];
+            let i = 1;
+            let nodeId = 1;
+            
+            while (queue.length > 0 && i < arr.length) {
+                const node = queue.shift();
+                
+                if (i < arr.length && arr[i] !== null) {
+                    node.left = new TreeNode(arr[i], nodeId++);
+                    queue.push(node.left);
+                }
+                i++;
+                
+                if (i < arr.length && arr[i] !== null) {
+                    node.right = new TreeNode(arr[i], nodeId++);
+                    queue.push(node.right);
+                }
+                i++;
+            }
+            
+            return root;
+        }
+        
+        // Calculate tree positions
+        function calculatePositions(root) {
+            if (!root) return { nodes: [], edges: [], width: 0, height: 0 };
+            
+            const nodes = [];
+            const edges = [];
+            let minX = Infinity, maxX = -Infinity;
+            
+            function getHeight(node) {
+                if (!node) return 0;
+                return 1 + Math.max(getHeight(node.left), getHeight(node.right));
+            }
+            
+            const treeHeight = getHeight(root);
+            const levelHeight = 60;
+            
+            function assignPositions(node, x, y, spread) {
+                if (!node) return;
+                
+                node.x = x;
+                node.y = y;
+                nodes.push(node);
+                
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                
+                if (node.left) {
+                    edges.push({ from: node, to: node.left });
+                    assignPositions(node.left, x - spread, y + levelHeight, spread / 2);
+                }
+                if (node.right) {
+                    edges.push({ from: node, to: node.right });
+                    assignPositions(node.right, x + spread, y + levelHeight, spread / 2);
+                }
+            }
+            
+            const initialSpread = Math.pow(2, treeHeight - 1) * 25;
+            assignPositions(root, 0, 30, initialSpread);
+            
+            // Normalize positions
+            const offsetX = -minX + 40;
+            nodes.forEach(n => n.x += offsetX);
+            
+            return {
+                nodes,
+                edges,
+                width: maxX - minX + 80,
+                height: treeHeight * levelHeight + 40
+            };
+        }
+        
+        // Execution tracer
+        class ExecutionTracer {
+            constructor(root, globals, code) {
+                this.root = root;
+                this.initialGlobals = JSON.parse(JSON.stringify(globals));
+                this.globals = globals;
+                this.code = code;
+                this.steps = [];
+                this.currentStack = [];
+                
+                this.trace();
+            }
+            
+            trace() {
+                const self = this;
+                const funcMatch = this.code.match(/function\s+(\w+)/);
+                if (!funcMatch) throw new Error("Could not find function name");
+                const funcName = funcMatch[1];
+                
+                // Create traced version
+                const tracedCode = `
+                    (function() {
+                        ${self.code.replace(
+                            new RegExp(`(${funcName})\\s*\\(`, 'g'),
+                            '__traced_$1('
+                        ).replace(
+                            new RegExp(`function\\s+${funcName}`),
+                            `function __traced_${funcName}`
+                        )}
+                        
+                        function ${funcName}(node, globals) {
+                            const nodeVal = node ? node.val : null;
+                            const nodeId = node ? node.id : null;
+                            
+                            self.recordCall('${funcName}', nodeVal, nodeId);
+                            
+                            const result = __traced_${funcName}(node, globals);
+                            
+                            self.recordReturn('${funcName}', nodeVal, nodeId, result);
+                            
+                            return result;
+                        }
+                        
+                        return ${funcName};
+                    })()
+                `;
+                
+                try {
+                    const tracedFunc = eval(tracedCode);
+                    tracedFunc(this.root, this.globals);
+                } catch (e) {
+                    throw new Error(`Execution error: ${e.message}`);
+                }
+            }
+            
+            recordCall(funcName, nodeVal, nodeId) {
+                const globalsSnapshot = JSON.parse(JSON.stringify(this.globals));
+                
+                this.currentStack.push({
+                    funcName,
+                    nodeVal,
+                    nodeId,
+                    state: 'active'
+                });
+                
+                this.steps.push({
+                    type: 'call',
+                    funcName,
+                    nodeVal,
+                    nodeId,
+                    stack: JSON.parse(JSON.stringify(this.currentStack)),
+                    globals: globalsSnapshot,
+                    activeNode: nodeId,
+                    message: `Call ${funcName}(${nodeVal === null ? 'null' : nodeVal})`
+                });
+            }
+            
+            recordReturn(funcName, nodeVal, nodeId, result) {
+                const globalsSnapshot = JSON.parse(JSON.stringify(this.globals));
+                
+                // Mark current frame as returning
+                if (this.currentStack.length > 0) {
+                    this.currentStack[this.currentStack.length - 1].state = 'returning';
+                    this.currentStack[this.currentStack.length - 1].result = result;
+                }
+                
+                this.steps.push({
+                    type: 'return',
+                    funcName,
+                    nodeVal,
+                    nodeId,
+                    result,
+                    stack: JSON.parse(JSON.stringify(this.currentStack)),
+                    globals: globalsSnapshot,
+                    returningNode: nodeId,
+                    message: `Return ${result} from ${funcName}(${nodeVal === null ? 'null' : nodeVal})`
+                });
+                
+                this.currentStack.pop();
+            }
+        }
+        
+        // UI State
+        let tree = null;
+        let treeLayout = null;
+        let tracer = null;
+        let currentStep = 0;
+        let isPlaying = false;
+        let playInterval = null;
+        let completedNodes = new Set();
+        
+        // DOM Elements
+        const treeInput = document.getElementById('treeInput');
+        const globalsInput = document.getElementById('globalsInput');
+        const codeInput = document.getElementById('codeInput');
+        const runBtn = document.getElementById('runBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const playBtn = document.getElementById('playBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const speedSlider = document.getElementById('speedSlider');
+        const stepNum = document.getElementById('stepNum');
+        const totalSteps = document.getElementById('totalSteps');
+        const treeSvg = document.getElementById('treeSvg');
+        const callStack = document.getElementById('callStack');
+        const varsGrid = document.getElementById('varsGrid');
+        const traceLog = document.getElementById('traceLog');
+        const errorDisplay = document.getElementById('errorDisplay');
+        const presetSelect = document.getElementById('presetSelect');
+        const saveBtn = document.getElementById('saveBtn');
+        const deleteBtn = document.getElementById('deleteBtn');
+        const saveModal = document.getElementById('saveModal');
+        const deleteModal = document.getElementById('deleteModal');
+        
+        let currentSelectedProblem = null;
+        let cachedProblems = {};
+        
+        // Load preset or custom problem
+        presetSelect.addEventListener('change', async () => {
+            const value = presetSelect.value;
+            currentSelectedProblem = value;
+            
+            // Show/hide delete button based on whether it's a custom problem
+            deleteBtn.style.display = value.startsWith('custom_') ? 'inline-block' : 'none';
+            
+            // Problem info section
+            const problemInfoSection = document.getElementById('problemInfoSection');
+            const problemLink = document.getElementById('problemLink');
+            const problemNotesDisplay = document.getElementById('problemNotesDisplay');
+            
+            if (value.startsWith('custom_')) {
+                // Load custom problem
+                const problemId = value.replace('custom_', '');
+                const problem = cachedProblems[problemId];
+                
+                if (problem) {
+                    treeInput.value = problem.tree;
+                    globalsInput.value = problem.globals;
+                    codeInput.value = problem.code;
+                    
+                    // Show problem info if there's URL or notes
+                    if (problem.url || problem.notes) {
+                        problemInfoSection.style.display = 'block';
+                        
+                        if (problem.url) {
+                            problemLink.href = problem.url;
+                            problemLink.style.display = 'inline';
+                        } else {
+                            problemLink.style.display = 'none';
+                        }
+                        
+                        problemNotesDisplay.textContent = problem.notes || '';
+                        problemNotesDisplay.style.display = problem.notes ? 'block' : 'none';
+                    } else {
+                        problemInfoSection.style.display = 'none';
+                    }
+                }
+            } else {
+                // Hide problem info for built-in presets
+                problemInfoSection.style.display = 'none';
+                
+                if (presets[value]) {
+                    // Load built-in preset
+                    const preset = presets[value];
+                    treeInput.value = preset.tree;
+                    globalsInput.value = preset.globals;
+                    codeInput.value = preset.code;
+                }
+            }
+        });
+        
+        // Save problem
+        saveBtn.addEventListener('click', () => {
+            document.getElementById('problemName').value = '';
+            document.getElementById('problemUrl').value = '';
+            document.getElementById('problemNotes').value = '';
+            saveModal.classList.add('active');
+            document.getElementById('problemName').focus();
+        });
+        
+        document.getElementById('cancelSave').addEventListener('click', () => {
+            saveModal.classList.remove('active');
+        });
+        
+        document.getElementById('confirmSave').addEventListener('click', async () => {
+            const name = document.getElementById('problemName').value.trim();
+            if (!name) {
+                showToast('Please enter a problem name', true);
+                return;
+            }
+            
+            const code = codeInput.value.trim();
+            if (!code) {
+                showToast('Please enter some code first', true);
+                return;
+            }
+            
+            const problem = {
+                name: name,
+                tree: treeInput.value,
+                globals: globalsInput.value,
+                code: code,
+                url: document.getElementById('problemUrl').value.trim(),
+                notes: document.getElementById('problemNotes').value.trim()
+            };
+            
+            const saved = await saveProblem(problem);
+            if (saved) {
+                cachedProblems = await populateCustomProblems();
+                presetSelect.value = `custom_${saved.id}`;
+                currentSelectedProblem = `custom_${saved.id}`;
+                deleteBtn.style.display = 'inline-block';
+                
+                saveModal.classList.remove('active');
+                showToast(`Saved "${name}"`);
+            }
+        });
+        
+        // Delete problem
+        deleteBtn.addEventListener('click', () => {
+            if (!currentSelectedProblem || !currentSelectedProblem.startsWith('custom_')) return;
+            
+            const problemId = currentSelectedProblem.replace('custom_', '');
+            const problem = cachedProblems[problemId];
+            
+            if (problem) {
+                document.getElementById('deleteTargetName').textContent = problem.name;
+                deleteModal.classList.add('active');
+            }
+        });
+        
+        document.getElementById('cancelDelete').addEventListener('click', () => {
+            deleteModal.classList.remove('active');
+        });
+        
+        document.getElementById('confirmDelete').addEventListener('click', async () => {
+            if (!currentSelectedProblem) return;
+            
+            const problemId = currentSelectedProblem.replace('custom_', '');
+            const problemName = cachedProblems[problemId]?.name || 'Problem';
+            
+            const success = await deleteProblem(problemId);
+            if (success) {
+                cachedProblems = await populateCustomProblems();
+                presetSelect.value = '';
+                currentSelectedProblem = null;
+                deleteBtn.style.display = 'none';
+                
+                deleteModal.classList.remove('active');
+                showToast(`Deleted "${problemName}"`);
+            }
+        });
+        
+        // Close modals on overlay click
+        saveModal.addEventListener('click', (e) => {
+            if (e.target === saveModal) saveModal.classList.remove('active');
+        });
+        deleteModal.addEventListener('click', (e) => {
+            if (e.target === deleteModal) deleteModal.classList.remove('active');
+        });
+        
+        // Close modals on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                saveModal.classList.remove('active');
+                deleteModal.classList.remove('active');
+                document.getElementById('importModal').classList.remove('active');
+            }
+        });
+        
+        // Export problems to JSON file
+        document.getElementById('exportBtn').addEventListener('click', async () => {
+            const problemCount = Object.keys(cachedProblems).length;
+            
+            if (problemCount === 0) {
+                showToast('No problems to export', true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/problems/export/all`);
+                const exportData = await response.json();
+                
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `recursive-viz-problems-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast(`Exported ${problemCount} problem${problemCount === 1 ? '' : 's'}`);
+            } catch (e) {
+                showToast('Error exporting problems', true);
+            }
+        });
+        
+        // Import problems from JSON file
+        const importFile = document.getElementById('importFile');
+        const importModal = document.getElementById('importModal');
+        let pendingImportData = null;
+        
+        document.getElementById('importBtn').addEventListener('click', () => {
+            importFile.click();
+        });
+        
+        importFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    
+                    // Validate structure
+                    if (!data.problems || typeof data.problems !== 'object') {
+                        throw new Error('Invalid file format');
+                    }
+                    
+                    pendingImportData = data.problems;
+                    const problemNames = Object.values(data.problems).map(p => p.name);
+                    
+                    document.getElementById('importCount').textContent = problemNames.length;
+                    document.getElementById('importPreview').innerHTML = problemNames
+                        .map(name => `<div style="color: #7fc8f8; padding: 4px 0; border-bottom: 1px solid #2d3748;">📄 ${name}</div>`)
+                        .join('');
+                    
+                    importModal.classList.add('active');
+                } catch (err) {
+                    showToast('Invalid file format', true);
+                }
+            };
+            reader.readAsText(file);
+            
+            // Reset file input so the same file can be selected again
+            importFile.value = '';
+        });
+        
+        document.getElementById('cancelImport').addEventListener('click', () => {
+            importModal.classList.remove('active');
+            pendingImportData = null;
+        });
+        
+        document.getElementById('confirmImport').addEventListener('click', async () => {
+            if (!pendingImportData) return;
+            
+            const merge = document.getElementById('importMerge').checked;
+            
+            // Convert to array format for API
+            const problemsArray = Array.isArray(pendingImportData) 
+                ? pendingImportData 
+                : Object.values(pendingImportData);
+            
+            const result = await importProblems(problemsArray, merge);
+            if (result) {
+                cachedProblems = await populateCustomProblems();
+                importModal.classList.remove('active');
+                pendingImportData = null;
+                showToast(`Imported ${result.imported} problem${result.imported === 1 ? '' : 's'}`);
+            }
+        });
+        
+        importModal.addEventListener('click', (e) => {
+            if (e.target === importModal) {
+                importModal.classList.remove('active');
+                pendingImportData = null;
+            }
+        });
+        
+        // Run visualization
+        runBtn.addEventListener('click', runVisualization);
+        
+        function runVisualization() {
+            errorDisplay.innerHTML = '';
+            completedNodes.clear();
+            
+            try {
+                // Parse tree
+                const treeArr = JSON.parse(treeInput.value);
+                tree = buildTree(treeArr);
+                treeLayout = calculatePositions(tree);
+                
+                // Parse globals
+                let globals = {};
+                if (globalsInput.value.trim()) {
+                    globals = JSON.parse(globalsInput.value);
+                }
+                
+                // Get code
+                const code = codeInput.value;
+                if (!code.trim()) throw new Error("Please enter a function");
+                
+                // Run tracer
+                tracer = new ExecutionTracer(tree, globals, code);
+                
+                currentStep = 0;
+                
+                // Enable controls
+                prevBtn.disabled = false;
+                nextBtn.disabled = false;
+                playBtn.disabled = false;
+                resetBtn.disabled = false;
+                
+                // Render tree
+                renderTree();
+                
+                // Update UI
+                updateVisualization();
+                
+            } catch (e) {
+                errorDisplay.innerHTML = `<div class="error-msg">${e.message}</div>`;
+            }
+        }
+        
+        function renderTree() {
+            if (!treeLayout) return;
+            
+            const { nodes, edges, width, height } = treeLayout;
+            
+            treeSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            treeSvg.style.width = `${Math.min(width, 400)}px`;
+            treeSvg.style.height = `${Math.min(height, 250)}px`;
+            
+            // Build SVG content
+            let svg = '';
+            
+            // Edges
+            edges.forEach(e => {
+                svg += `<line class="tree-edge" id="edge-${e.from.id}-${e.to.id}" 
+                         x1="${e.from.x}" y1="${e.from.y}" 
+                         x2="${e.to.x}" y2="${e.to.y}"/>`;
+            });
+            
+            // Nodes
+            const colors = ['#7fc8f8', '#82aaff', '#c792ea', '#f78c6c', '#c3e88d', '#ffcb6b', '#ff7eb6'];
+            nodes.forEach((n, i) => {
+                const color = colors[i % colors.length];
+                svg += `<g class="tree-node" id="node-${n.id}">
+                    <circle cx="${n.x}" cy="${n.y}" r="20" fill="${color}"/>
+                    <text x="${n.x}" y="${n.y + 5}" text-anchor="middle" fill="#1a1a2e">${n.val}</text>
+                </g>`;
+            });
+            
+            treeSvg.innerHTML = svg;
+        }
+        
+        function updateVisualization() {
+            if (!tracer || tracer.steps.length === 0) return;
+            
+            const step = tracer.steps[currentStep];
+            
+            // Update step counter
+            stepNum.textContent = currentStep + 1;
+            totalSteps.textContent = tracer.steps.length;
+            
+            // Update buttons
+            prevBtn.disabled = currentStep === 0;
+            nextBtn.disabled = currentStep === tracer.steps.length - 1;
+            
+            // Track completed nodes
+            if (step.type === 'return' && step.nodeId !== null) {
+                completedNodes.add(step.nodeId);
+            }
+            
+            // Update tree nodes
+            treeLayout.nodes.forEach(n => {
+                const nodeEl = document.getElementById(`node-${n.id}`);
+                if (nodeEl) {
+                    nodeEl.classList.remove('active', 'returning', 'completed');
+                    
+                    if (step.activeNode === n.id && step.type === 'call') {
+                        nodeEl.classList.add('active');
+                    } else if (step.returningNode === n.id && step.type === 'return') {
+                        nodeEl.classList.add('returning');
+                    } else if (completedNodes.has(n.id)) {
+                        nodeEl.classList.add('completed');
+                    }
+                }
+            });
+            
+            // Update call stack
+            if (step.stack.length === 0) {
+                callStack.innerHTML = '<div class="stack-empty">Stack is empty</div>';
+            } else {
+                callStack.innerHTML = [...step.stack].reverse().map((frame, i) => {
+                    const isTop = i === 0;
+                    let stateClass = '';
+                    if (isTop) {
+                        stateClass = frame.state === 'returning' ? 'returning' : 'active';
+                    }
+                    return `<div class="stack-frame ${stateClass}">
+                        <div class="call">${frame.funcName}(${frame.nodeVal === null ? 'null' : frame.nodeVal})</div>
+                        ${frame.result !== undefined ? `<div class="vars">→ ${frame.result}</div>` : ''}
+                    </div>`;
+                }).join('');
+            }
+            
+            // Update variables
+            const globalKeys = Object.keys(step.globals);
+            if (globalKeys.length === 0) {
+                varsGrid.innerHTML = '<div class="stack-empty">No variables</div>';
+            } else {
+                varsGrid.innerHTML = globalKeys.map(key => {
+                    const val = step.globals[key];
+                    const prevStep = currentStep > 0 ? tracer.steps[currentStep - 1] : null;
+                    const prevVal = prevStep ? prevStep.globals[key] : val;
+                    const changed = prevVal !== val;
+                    return `<div class="var-box ${changed ? 'highlight updated' : ''}">
+                        <div class="label">${key}</div>
+                        <div class="value">${val}</div>
+                    </div>`;
+                }).join('');
+            }
+            
+            // Update trace log
+            const logEntries = tracer.steps.slice(0, currentStep + 1).map((s, i) => {
+                const isCurrent = i === currentStep;
+                if (s.type === 'call') {
+                    return `<div class="trace-entry ${isCurrent ? 'trace-call' : ''}" style="${isCurrent ? 'font-weight:600' : ''}">
+                        <span class="trace-arrow">→</span> ${s.message}
+                    </div>`;
+                } else {
+                    return `<div class="trace-entry ${isCurrent ? 'trace-return' : ''}" style="${isCurrent ? 'font-weight:600' : ''}">
+                        <span class="trace-arrow">←</span> ${s.message}
+                    </div>`;
+                }
+            }).join('');
+            traceLog.innerHTML = logEntries;
+            traceLog.scrollTop = traceLog.scrollHeight;
+        }
+        
+        // Navigation
+        prevBtn.addEventListener('click', () => {
+            if (currentStep > 0) {
+                // Need to recalculate completed nodes when going back
+                if (tracer.steps[currentStep].type === 'return') {
+                    completedNodes.delete(tracer.steps[currentStep].nodeId);
+                }
+                currentStep--;
+                updateVisualization();
+            }
+        });
+        
+        nextBtn.addEventListener('click', () => {
+            if (currentStep < tracer.steps.length - 1) {
+                currentStep++;
+                updateVisualization();
+            }
+        });
+        
+        playBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                stopPlaying();
+            } else {
+                startPlaying();
+            }
+        });
+        
+        function startPlaying() {
+            isPlaying = true;
+            playBtn.textContent = '⏸ Pause';
+            const speed = 1100 - speedSlider.value * 100;
+            playInterval = setInterval(() => {
+                if (currentStep < tracer.steps.length - 1) {
+                    currentStep++;
+                    updateVisualization();
+                } else {
+                    stopPlaying();
+                }
+            }, speed);
+        }
+        
+        function stopPlaying() {
+            isPlaying = false;
+            playBtn.textContent = '▶ Play';
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+            }
+        }
+        
+        resetBtn.addEventListener('click', () => {
+            stopPlaying();
+            currentStep = 0;
+            completedNodes.clear();
+            updateVisualization();
+        });
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'TEXTAREA') return;
+            
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                if (tracer && currentStep < tracer.steps.length - 1) {
+                    currentStep++;
+                    updateVisualization();
+                }
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (tracer && currentStep > 0) {
+                    if (tracer.steps[currentStep].type === 'return') {
+                        completedNodes.delete(tracer.steps[currentStep].nodeId);
+                    }
+                    currentStep--;
+                    updateVisualization();
+                }
+            }
+        });
+        
+        // Initialize
+        async function init() {
+            cachedProblems = await populateCustomProblems();
+            presetSelect.value = 'diameter';
+            presetSelect.dispatchEvent(new Event('change'));
+        }
+        init();
+    </script>
+</body>
+</html>
