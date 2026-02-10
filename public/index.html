@@ -535,6 +535,32 @@
             color: #636d83;
         }
         
+        /* Language toggle */
+        .lang-toggle {
+            display: flex;
+            gap: 6px;
+        }
+        .lang-btn {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            color: #a0aec0;
+            padding: 5px 14px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lang-btn:hover {
+            background: #4a5568;
+        }
+        .lang-btn.active {
+            background: #7fc8f8;
+            color: #1a1a2e;
+            border-color: #7fc8f8;
+            font-weight: 600;
+        }
+
         /* Error display */
         .error-msg {
             background: rgba(255, 100, 100, 0.1);
@@ -632,6 +658,14 @@
                 <textarea class="tree-input" id="globalsInput" rows="2" placeholder='{"maxD": 0}'></textarea>
             </div>
             
+            <div class="editor-section" style="padding: 8px 15px;">
+                <div class="section-title">Language</div>
+                <div class="lang-toggle">
+                    <button class="lang-btn active" data-lang="javascript">JavaScript</button>
+                    <button class="lang-btn" data-lang="python">Python</button>
+                </div>
+            </div>
+
             <!-- Problem Info (shown when custom problem is loaded) -->
             <div class="editor-section" id="problemInfoSection" style="display: none; background: #1e2a4a;">
                 <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
@@ -647,7 +681,7 @@
                     <textarea class="code-textarea" id="codeInput" spellcheck="false"></textarea>
                     <button class="run-btn" id="runBtn">▶ Run Visualization</button>
                 </div>
-                <div class="help-text">
+                <div class="help-text" id="langHelpText">
                     Use <code>node.val</code>, <code>node.left</code>, <code>node.right</code><br>
                     Use <code>globals.varName</code> for tracked variables<br>
                     The function receives (node, globals) as parameters
@@ -1038,7 +1072,35 @@
         
         let currentSelectedProblem = null;
         let cachedProblems = {};
-        
+        let currentLanguage = 'javascript';
+
+        // Language toggle
+        const langBtns = document.querySelectorAll('.lang-btn');
+        const helpText = document.querySelector('.help-text:last-of-type');
+
+        function setLanguage(lang) {
+            currentLanguage = lang;
+            langBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.lang === lang);
+            });
+            // Update help text
+            const helpEl = document.getElementById('langHelpText');
+            if (lang === 'python') {
+                helpEl.innerHTML = `Use <code>node.val</code>, <code>node.left</code>, <code>node.right</code><br>
+                    Use <code>globals["varName"]</code> for tracked variables<br>
+                    The function receives (node, globals) as parameters<br>
+                    Use <code>None</code> instead of <code>null</code>`;
+            } else {
+                helpEl.innerHTML = `Use <code>node.val</code>, <code>node.left</code>, <code>node.right</code><br>
+                    Use <code>globals.varName</code> for tracked variables<br>
+                    The function receives (node, globals) as parameters`;
+            }
+        }
+
+        langBtns.forEach(btn => {
+            btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
+        });
+
         // Load custom problem
         presetSelect.addEventListener('change', async () => {
             const value = presetSelect.value;
@@ -1060,6 +1122,7 @@
                     treeInput.value = problem.tree;
                     globalsInput.value = problem.globals;
                     codeInput.value = problem.code;
+                    setLanguage(problem.language || 'javascript');
 
                     if (problem.url || problem.notes) {
                         problemInfoSection.style.display = 'block';
@@ -1114,7 +1177,8 @@
                 globals: globalsInput.value,
                 code: code,
                 url: document.getElementById('problemUrl').value.trim(),
-                notes: document.getElementById('problemNotes').value.trim()
+                notes: document.getElementById('problemNotes').value.trim(),
+                language: currentLanguage
             };
             
             const saved = await saveProblem(problem);
@@ -1286,44 +1350,68 @@
         
         // Run visualization
         runBtn.addEventListener('click', runVisualization);
-        
-        function runVisualization() {
+
+        async function runVisualization() {
             errorDisplay.innerHTML = '';
             completedNodes.clear();
-            
+
             try {
                 // Parse tree
                 const treeArr = JSON.parse(treeInput.value);
                 tree = buildTree(treeArr);
                 treeLayout = calculatePositions(tree);
-                
+
                 // Parse globals
                 let globals = {};
                 if (globalsInput.value.trim()) {
                     globals = JSON.parse(globalsInput.value);
                 }
-                
+
                 // Get code
                 const code = codeInput.value;
                 if (!code.trim()) throw new Error("Please enter a function");
-                
-                // Run tracer
-                tracer = new ExecutionTracer(tree, globals, code);
-                
+
+                if (currentLanguage === 'python') {
+                    // Python path: send to server
+                    runBtn.textContent = '⏳ Running...';
+                    runBtn.disabled = true;
+
+                    try {
+                        const response = await fetch('/api/execute-python', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ code, tree: treeArr, globals })
+                        });
+                        const result = await response.json();
+
+                        if (result.error) {
+                            throw new Error(result.error);
+                        }
+
+                        tracer = { steps: result.steps };
+                    } finally {
+                        runBtn.textContent = '▶ Run Visualization';
+                        runBtn.disabled = false;
+                    }
+                } else {
+                    // JavaScript path: use ExecutionTracer as before
+                    tracer = new ExecutionTracer(tree, globals, code);
+                }
+
                 currentStep = 0;
-                
+
                 // Enable controls
                 prevBtn.disabled = false;
                 nextBtn.disabled = false;
                 playBtn.disabled = false;
                 resetBtn.disabled = false;
-                
+
                 // Render tree
                 renderTree();
-                
+
                 // Update UI
                 updateVisualization();
-                
+
             } catch (e) {
                 errorDisplay.innerHTML = `<div class="error-msg">${e.message}</div>`;
             }
