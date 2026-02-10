@@ -176,25 +176,119 @@ app.get('/api/problems/export/all', (req, res) => {
   }
 });
 
+// Preprocess LeetCode-style Python code into standalone functions
+function preprocessPython(code) {
+  // Remove all comment-only lines (LeetCode preamble, etc.)
+  code = code.replace(/^\s*#.*$/gm, '');
+
+  // Strip "class Solution:" wrapper and de-indent methods
+  if (/^\s*class\s+\w+/m.test(code)) {
+    const lines = code.split('\n');
+    const result = [];
+    let inClass = false;
+    let methodIndent = -1;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (/^class\s+\w+/.test(trimmed)) {
+        inClass = true;
+        methodIndent = -1;
+        continue;
+      }
+
+      if (inClass) {
+        if (trimmed === '') { result.push(''); continue; }
+
+        const indent = line.search(/\S/);
+        // If we hit a line at column 0, we've left the class
+        if (indent === 0) { inClass = false; result.push(line); continue; }
+
+        // Detect method indent from first def
+        if (methodIndent < 0 && trimmed.startsWith('def ')) {
+          methodIndent = indent;
+        }
+
+        result.push(methodIndent >= 0 ? line.slice(methodIndent) : line);
+      } else {
+        result.push(line);
+      }
+    }
+    code = result.join('\n');
+  }
+
+  // Clean def lines: remove self, type annotations, return type
+  code = code.replace(/def\s+(\w+)\s*\(([^)]*)\)\s*(?:->[^:]+)?:/g, (_match, name, params) => {
+    const cleanParams = params.split(',')
+      .map(p => p.trim())
+      .filter(p => p && p !== 'self')
+      .map(p => p.replace(/\s*:.*$/, ''))
+      .join(', ');
+    return `def ${name}(${cleanParams}):`;
+  });
+
+  // Replace self.method( with method(
+  code = code.replace(/self\.(\w+)\s*\(/g, '$1(');
+
+  return code;
+}
+
 // Build a self-contained Python script for tracing recursion
 function buildPythonScript(userCode, treeJson, globalsJson) {
-  // Extract function name from "def funcName("
-  const funcMatch = userCode.match(/def\s+(\w+)\s*\(/);
-  if (!funcMatch) throw new Error('Could not find function definition (expected "def funcName(...)")');
-  const funcName = funcMatch[1];
+  // Preprocess LeetCode-style code (class/self/annotations)
+  const code = preprocessPython(userCode);
 
-  // Rename original function and build wrapper
-  const renamedCode = userCode.replace(
-    new RegExp(`def\\s+${funcName}\\s*\\(`),
-    `def _original_${funcName}(`
-  );
+  // Find all function definitions with their parameter lists
+  const funcDefs = [];
+  const defRegex = /def\s+(\w+)\s*\(([^)]*)\)/g;
+  let m;
+  while ((m = defRegex.exec(code)) !== null) {
+    const name = m[1];
+    const paramsStr = m[2].trim();
+    const params = paramsStr ? paramsStr.split(',').map(p => p.trim()) : [];
+    funcDefs.push({ name, paramsStr, params });
+  }
 
-  // Replace recursive calls inside the renamed body: funcName( -> _wrapped_funcName(
-  // We do this on the renamed code so we don't touch the def line
-  const rewiredCode = renamedCode.replace(
-    new RegExp(`(?<!def\\s)(?<!_original_)(?<!_wrapped_)\\b${funcName}\\s*\\(`, 'g'),
-    `_wrapped_${funcName}(`
-  );
+  if (funcDefs.length === 0) {
+    throw new Error('Could not find function definition (expected "def funcName(...)")');
+  }
+
+  const mainFunc = funcDefs[0];
+  const funcNames = funcDefs.map(f => f.name);
+
+  // Rename all functions: def foo( -> def _original_foo(
+  let processedCode = code;
+  for (const name of funcNames) {
+    processedCode = processedCode.replace(
+      new RegExp(`def\\s+${name}\\s*\\(`),
+      `def _original_${name}(`
+    );
+  }
+
+  // Rewire all calls: foo( -> _wrapped_foo(
+  for (const name of funcNames) {
+    processedCode = processedCode.replace(
+      new RegExp(`(?<!def\\s)(?<!_original_)(?<!_wrapped_)\\b${name}\\s*\\(`, 'g'),
+      `_wrapped_${name}(`
+    );
+  }
+
+  // Generate a wrapper for each function
+  const wrappers = funcDefs.map(f => {
+    const firstParam = f.params[0] || '_node';
+    return `def _wrapped_${f.name}(${f.paramsStr}):
+    _record_call("${f.name}", ${firstParam}, _globs)
+    result = _original_${f.name}(${f.paramsStr})
+    _record_return("${f.name}", ${firstParam}, _globs, result)
+    return result`;
+  }).join('\n\n');
+
+  // Determine entry call arguments: first param -> _tree, 'globals' param -> _globs
+  const mainCallArgs = mainFunc.params.map((p, i) => {
+    if (i === 0) return '_tree';
+    if (p === 'globals') return '_globs';
+    return p;
+  }).join(', ') || '_tree';
 
   return `
 import sys, json, collections
@@ -281,20 +375,16 @@ def _record_return(func_name, node, globs, result):
         _stack.pop()
 
 # ---------- User code (renamed) ----------
-${rewiredCode}
+${processedCode}
 
-# ---------- Wrapper ----------
-def _wrapped_${funcName}(node, globals):
-    _record_call("${funcName}", node, globals)
-    result = _original_${funcName}(node, globals)
-    _record_return("${funcName}", node, globals, result)
-    return result
+# ---------- Wrappers ----------
+${wrappers}
 
 # ---------- Main ----------
 try:
     _tree = build_tree(${treeJson})
     _globs = ${globalsJson}
-    _wrapped_${funcName}(_tree, _globs)
+    _wrapped_${mainFunc.name}(${mainCallArgs})
     print(json.dumps({"steps": _steps}))
 except RecursionError:
     print(json.dumps({"error": "Maximum recursion depth exceeded (limit: 500)"}))
