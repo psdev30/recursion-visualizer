@@ -210,27 +210,40 @@
         /* Main Layout */
         .main-container {
             display: grid;
-            grid-template-columns: 350px 1fr;
+            grid-template-columns: 350px 6px 1fr;
             height: calc(100vh - 60px);
+        }
+
+        /* Panel Splitter */
+        .panel-splitter {
+            background: #2d3748;
+            cursor: col-resize;
+            transition: background 0.2s;
+            position: relative;
+        }
+        .panel-splitter:hover,
+        .panel-splitter.active {
+            background: #7fc8f8;
         }
         
         /* Left Panel - Editor */
         .editor-panel {
             background: #0d1117;
-            border-right: 1px solid #2d3748;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow-y: auto;
+            min-width: 250px;
         }
         .editor-section {
             padding: 15px;
             border-bottom: 1px solid #2d3748;
+            transition: opacity 0.2s;
         }
-        .editor-section:last-child {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+        .editor-section.dragging {
+            opacity: 0.4;
+        }
+        .editor-section.drag-over {
+            border-top: 2px solid #7fc8f8;
         }
         .section-title {
             color: #f8a07f;
@@ -242,6 +255,19 @@
             justify-content: space-between;
             align-items: center;
         }
+        .drag-handle {
+            cursor: grab;
+            color: #636d83;
+            margin-right: 8px;
+            font-size: 14px;
+            user-select: none;
+        }
+        .drag-handle:hover {
+            color: #7fc8f8;
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
         .tree-input {
             background: #1a1a2e;
             border: 1px solid #2d3748;
@@ -251,7 +277,7 @@
             font-family: inherit;
             font-size: 12px;
             width: 100%;
-            resize: none;
+            resize: vertical;
         }
         .tree-input:focus {
             outline: none;
@@ -267,7 +293,6 @@
             flex-direction: column;
         }
         .code-textarea {
-            flex: 1;
             background: transparent;
             border: none;
             color: #eee;
@@ -275,8 +300,9 @@
             font-family: 'Monaco', 'Menlo', monospace;
             font-size: 12px;
             line-height: 1.6;
-            resize: none;
+            resize: vertical;
             width: 100%;
+            min-height: 150px;
         }
         .code-textarea:focus {
             outline: none;
@@ -365,9 +391,9 @@
         .viz-content {
             flex: 1;
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr 1fr;
-            gap: 15px;
+            grid-template-columns: 1fr 6px 1fr;
+            grid-template-rows: 1fr 6px 1fr;
+            gap: 0;
             padding: 15px;
             overflow: hidden;
         }
@@ -378,6 +404,28 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            margin: 4px;
+        }
+
+        .viz-splitter-v {
+            cursor: col-resize;
+            background: transparent;
+            position: relative;
+        }
+        .viz-splitter-v:hover,
+        .viz-splitter-v.active {
+            background: #7fc8f8;
+            border-radius: 3px;
+        }
+        .viz-splitter-h {
+            cursor: row-resize;
+            background: transparent;
+            grid-column: 1 / -1;
+        }
+        .viz-splitter-h:hover,
+        .viz-splitter-h.active {
+            background: #7fc8f8;
+            border-radius: 3px;
         }
         .viz-card-title {
             color: #f8a07f;
@@ -644,22 +692,22 @@
     <div class="main-container">
         <!-- Editor Panel -->
         <div class="editor-panel">
-            <div class="editor-section">
-                <div class="section-title">Tree Structure</div>
+            <div class="editor-section" draggable="true">
+                <div class="section-title"><span class="drag-handle">⠿</span>Tree Structure</div>
                 <textarea class="tree-input" id="treeInput" rows="3" placeholder="e.g. [1, 2, 3, 4, 5]">[1, 2, 3, 4, 5, null, null]</textarea>
                 <div class="help-text">Array format (level-order). Use null for empty nodes.</div>
             </div>
             
-            <div class="editor-section">
+            <div class="editor-section" draggable="true">
                 <div class="section-title">
-                    Global Variables
+                    <span><span class="drag-handle">⠿</span>Global Variables</span>
                     <span style="color: #636d83; font-size: 10px; text-transform: none;">JSON format</span>
                 </div>
                 <textarea class="tree-input" id="globalsInput" rows="2" placeholder='{"maxD": 0}'></textarea>
             </div>
             
-            <div class="editor-section" style="padding: 8px 15px;">
-                <div class="section-title">Language</div>
+            <div class="editor-section" draggable="true" style="padding: 8px 15px;">
+                <div class="section-title"><span class="drag-handle">⠿</span>Language</div>
                 <div class="lang-toggle">
                     <button class="lang-btn active" data-lang="javascript">JavaScript</button>
                     <button class="lang-btn" data-lang="python">Python</button>
@@ -667,16 +715,16 @@
             </div>
 
             <!-- Problem Info (shown when custom problem is loaded) -->
-            <div class="editor-section" id="problemInfoSection" style="display: none; background: #1e2a4a;">
+            <div class="editor-section" id="problemInfoSection" draggable="true" style="display: none; background: #1e2a4a;">
                 <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
-                    Problem Info
+                    <span><span class="drag-handle">⠿</span>Problem Info</span>
                     <a href="#" id="problemLink" target="_blank" style="color: #7fc8f8; font-size: 11px; text-decoration: none; text-transform: none;">Open on LeetCode →</a>
                 </div>
                 <div id="problemNotesDisplay" style="color: #a0aec0; font-size: 12px; line-height: 1.6; white-space: pre-wrap;"></div>
             </div>
             
-            <div class="editor-section">
-                <div class="section-title">Recursive Function</div>
+            <div class="editor-section" draggable="true">
+                <div class="section-title"><span class="drag-handle">⠿</span>Recursive Function</div>
                 <div class="code-editor">
                     <textarea class="code-textarea" id="codeInput" spellcheck="false"></textarea>
                     <button class="run-btn" id="runBtn">▶ Run Visualization</button>
@@ -690,6 +738,9 @@
             </div>
         </div>
         
+        <!-- Panel Splitter -->
+        <div class="panel-splitter" id="panelSplitter"></div>
+
         <!-- Visualization Panel -->
         <div class="viz-panel">
             <div class="controls">
@@ -706,32 +757,33 @@
                 </div>
             </div>
             
-            <div class="viz-content">
-                <!-- Tree -->
+            <div class="viz-content" id="vizContent">
+                <!-- Row 1 -->
                 <div class="viz-card">
                     <div class="viz-card-title">Tree</div>
                     <div class="tree-viz" id="treeViz">
                         <svg class="tree-svg" id="treeSvg"></svg>
                     </div>
                 </div>
-                
-                <!-- Call Stack -->
+                <div class="viz-splitter-v" id="vizSplitV1" data-row="top"></div>
                 <div class="viz-card">
                     <div class="viz-card-title">Call Stack</div>
                     <div class="stack-container" id="callStack">
                         <div class="stack-empty">Run to see call stack</div>
                     </div>
                 </div>
-                
-                <!-- Variables -->
+
+                <!-- Horizontal splitter -->
+                <div class="viz-splitter-h" id="vizSplitH"></div>
+
+                <!-- Row 2 -->
                 <div class="viz-card">
                     <div class="viz-card-title">Global Variables</div>
                     <div class="vars-grid" id="varsGrid">
                         <div class="stack-empty">No variables defined</div>
                     </div>
                 </div>
-                
-                <!-- Trace Log -->
+                <div class="viz-splitter-v" id="vizSplitV2" data-row="bottom"></div>
                 <div class="viz-card">
                     <div class="viz-card-title">Execution Trace</div>
                     <div class="trace-log" id="traceLog">
@@ -1382,7 +1434,14 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ code, tree: treeArr, globals })
                         });
-                        const result = await response.json();
+
+                        const text = await response.text();
+                        let result;
+                        try {
+                            result = JSON.parse(text);
+                        } catch (_) {
+                            throw new Error(response.ok ? 'Invalid response from server' : 'Server not running or endpoint missing — restart the server');
+                        }
 
                         if (result.error) {
                             throw new Error(result.error);
@@ -1613,6 +1672,145 @@
             }
         });
         
+        // Panel splitter resize
+        (function initSplitter() {
+            const splitter = document.getElementById('panelSplitter');
+            const container = document.querySelector('.main-container');
+            let dragging = false;
+
+            splitter.addEventListener('mousedown', (e) => {
+                dragging = true;
+                splitter.classList.add('active');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                const rect = container.getBoundingClientRect();
+                const x = Math.max(250, Math.min(e.clientX - rect.left, rect.width - 300));
+                container.style.gridTemplateColumns = `${x}px 6px 1fr`;
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!dragging) return;
+                dragging = false;
+                splitter.classList.remove('active');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            });
+        })();
+
+        // Viz panel splitters (column + row resize)
+        (function initVizSplitters() {
+            const vizContent = document.getElementById('vizContent');
+            let active = null; // { el, type: 'col'|'row' }
+
+            function onMouseDown(el, type) {
+                return (e) => {
+                    active = { el, type };
+                    el.classList.add('active');
+                    document.body.style.cursor = type === 'col' ? 'col-resize' : 'row-resize';
+                    document.body.style.userSelect = 'none';
+                    e.preventDefault();
+                };
+            }
+
+            // Vertical (column) splitters
+            document.getElementById('vizSplitV1').addEventListener('mousedown', onMouseDown(document.getElementById('vizSplitV1'), 'col'));
+            document.getElementById('vizSplitV2').addEventListener('mousedown', onMouseDown(document.getElementById('vizSplitV2'), 'col'));
+
+            // Horizontal (row) splitter
+            document.getElementById('vizSplitH').addEventListener('mousedown', onMouseDown(document.getElementById('vizSplitH'), 'row'));
+
+            document.addEventListener('mousemove', (e) => {
+                if (!active) return;
+                const rect = vizContent.getBoundingClientRect();
+
+                if (active.type === 'col') {
+                    const x = e.clientX - rect.left;
+                    const pct = Math.max(15, Math.min(85, (x / rect.width) * 100));
+                    vizContent.style.gridTemplateColumns = `${pct}% 6px 1fr`;
+                } else {
+                    const y = e.clientY - rect.top;
+                    const pct = Math.max(15, Math.min(85, (y / rect.height) * 100));
+                    vizContent.style.gridTemplateRows = `${pct}% 6px 1fr`;
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!active) return;
+                active.el.classList.remove('active');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                active = null;
+            });
+        })();
+
+        // Drag-and-drop reordering for editor sections
+        (function initDragDrop() {
+            const panel = document.querySelector('.editor-panel');
+            let draggedEl = null;
+
+            panel.addEventListener('dragstart', (e) => {
+                const section = e.target.closest('.editor-section');
+                if (!section) return;
+                draggedEl = section;
+                section.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+
+            panel.addEventListener('dragend', () => {
+                if (draggedEl) draggedEl.classList.remove('dragging');
+                panel.querySelectorAll('.editor-section').forEach(s => s.classList.remove('drag-over'));
+                draggedEl = null;
+            });
+
+            panel.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const target = e.target.closest('.editor-section');
+                if (!target || target === draggedEl) return;
+                panel.querySelectorAll('.editor-section').forEach(s => s.classList.remove('drag-over'));
+                target.classList.add('drag-over');
+            });
+
+            panel.addEventListener('dragleave', (e) => {
+                const target = e.target.closest('.editor-section');
+                if (target) target.classList.remove('drag-over');
+            });
+
+            panel.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const target = e.target.closest('.editor-section');
+                if (!target || !draggedEl || target === draggedEl) return;
+                target.classList.remove('drag-over');
+
+                // Insert dragged element before or after target based on position
+                const targetRect = target.getBoundingClientRect();
+                const midY = targetRect.top + targetRect.height / 2;
+                if (e.clientY < midY) {
+                    panel.insertBefore(draggedEl, target);
+                } else {
+                    panel.insertBefore(draggedEl, target.nextSibling);
+                }
+            });
+
+            // Prevent drag when interacting with textareas/inputs inside sections
+            panel.querySelectorAll('textarea, input, button:not(.drag-handle)').forEach(el => {
+                el.addEventListener('mousedown', () => {
+                    el.closest('.editor-section').draggable = false;
+                });
+                el.addEventListener('mouseup', () => {
+                    el.closest('.editor-section').draggable = true;
+                });
+                el.addEventListener('blur', () => {
+                    el.closest('.editor-section').draggable = true;
+                });
+            });
+        })();
+
         // Initialize
         async function init() {
             cachedProblems = await populateCustomProblems();

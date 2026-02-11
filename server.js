@@ -290,6 +290,10 @@ function buildPythonScript(userCode, treeJson, globalsJson) {
     return p;
   }).join(', ') || '_tree';
 
+  // Convert JSON literals to Python equivalents
+  const treePy = treeJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+  const globalsPy = globalsJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+
   return `
 import sys, json, collections
 
@@ -382,8 +386,8 @@ ${wrappers}
 
 # ---------- Main ----------
 try:
-    _tree = build_tree(${treeJson})
-    _globs = ${globalsJson}
+    _tree = build_tree(${treePy})
+    _globs = ${globalsPy}
     _wrapped_${mainFunc.name}(${mainCallArgs})
     print(json.dumps({"steps": _steps}))
 except RecursionError:
