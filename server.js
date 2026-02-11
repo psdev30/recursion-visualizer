@@ -14,8 +14,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// Ensure db directory exists
+const dbDir = path.join(__dirname, 'db');
+if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+
 // Initialize SQLite database
-const db = new Database(path.join(__dirname, 'db', 'problems.db'));
+const db = new Database(path.join(dbDir, 'problems.db'));
 
 // Create tables
 db.exec(`

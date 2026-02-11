@@ -468,6 +468,76 @@
         .tree-node.completed circle {
             opacity: 0.5;
         }
+        .null-node {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .null-node.visible {
+            opacity: 0.4;
+        }
+        .null-node.active {
+            opacity: 1;
+        }
+        .null-node circle {
+            fill: none;
+            stroke: #4a5568;
+            stroke-width: 1.5;
+            stroke-dasharray: 4 3;
+        }
+        .null-node.active circle {
+            stroke: #7fc8f8;
+            stroke-width: 2;
+            filter: drop-shadow(0 0 6px rgba(127, 200, 248, 0.6));
+        }
+        .null-node text {
+            font-family: 'Monaco', monospace;
+            font-size: 9px;
+            fill: #636d83;
+        }
+        .null-node.active text {
+            fill: #7fc8f8;
+        }
+        .null-edge {
+            stroke: #4a5568;
+            stroke-width: 1;
+            stroke-dasharray: 4 3;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .null-edge.visible {
+            opacity: 0.3;
+        }
+        .null-edge.active {
+            opacity: 0.8;
+            stroke: #7fc8f8;
+        }
+        .return-label text {
+            font-family: 'Monaco', monospace;
+            font-size: 11px;
+            font-weight: bold;
+            fill: #c3e88d;
+        }
+        .return-label rect {
+            fill: rgba(26, 26, 46, 0.85);
+            stroke: #c3e88d;
+            stroke-width: 1;
+            rx: 4;
+        }
+        .return-label .return-arrow {
+            stroke: #c3e88d;
+            stroke-width: 1.5;
+            fill: none;
+        }
+        .return-label .return-arrow-head {
+            fill: #c3e88d;
+        }
+        .return-label.active text {
+            fill: #fff;
+        }
+        .return-label.active rect {
+            stroke: #fff;
+            fill: rgba(127, 200, 248, 0.2);
+        }
         .tree-edge {
             stroke: #4a5568;
             stroke-width: 2;
@@ -709,8 +779,8 @@
             <div class="editor-section" draggable="true" style="padding: 8px 15px;">
                 <div class="section-title"><span class="drag-handle">⠿</span>Language</div>
                 <div class="lang-toggle">
-                    <button class="lang-btn active" data-lang="javascript">JavaScript</button>
-                    <button class="lang-btn" data-lang="python">Python</button>
+                    <button class="lang-btn" data-lang="javascript">JavaScript</button>
+                    <button class="lang-btn active" data-lang="python">Python</button>
                 </div>
             </div>
 
@@ -731,8 +801,9 @@
                 </div>
                 <div class="help-text" id="langHelpText">
                     Use <code>node.val</code>, <code>node.left</code>, <code>node.right</code><br>
-                    Use <code>globals.varName</code> for tracked variables<br>
-                    The function receives (node, globals) as parameters
+                    Use <code>globals["varName"]</code> for tracked variables<br>
+                    The function receives (node, globals) as parameters<br>
+                    Use <code>None</code> instead of <code>null</code>
                 </div>
                 <div id="errorDisplay"></div>
             </div>
@@ -939,50 +1010,65 @@
         
         // Calculate tree positions
         function calculatePositions(root) {
-            if (!root) return { nodes: [], edges: [], width: 0, height: 0 };
-            
+            if (!root) return { nodes: [], edges: [], nullPositions: [], width: 0, height: 0 };
+
             const nodes = [];
             const edges = [];
+            const nullPositions = []; // { parentId, side, x, y }
             let minX = Infinity, maxX = -Infinity;
-            
+
             function getHeight(node) {
                 if (!node) return 0;
                 return 1 + Math.max(getHeight(node.left), getHeight(node.right));
             }
-            
+
             const treeHeight = getHeight(root);
             const levelHeight = 60;
-            
+
             function assignPositions(node, x, y, spread) {
                 if (!node) return;
-                
+
                 node.x = x;
                 node.y = y;
                 nodes.push(node);
-                
+
                 minX = Math.min(minX, x);
                 maxX = Math.max(maxX, x);
-                
+
+                const childX_L = x - spread;
+                const childX_R = x + spread;
+                const childY = y + levelHeight;
+
                 if (node.left) {
                     edges.push({ from: node, to: node.left });
-                    assignPositions(node.left, x - spread, y + levelHeight, spread / 2);
+                    assignPositions(node.left, childX_L, childY, spread / 2);
+                } else {
+                    nullPositions.push({ parentId: node.id, side: 'left', x: childX_L, y: childY, parentX: x, parentY: y });
+                    minX = Math.min(minX, childX_L);
+                    maxX = Math.max(maxX, childX_L);
                 }
                 if (node.right) {
                     edges.push({ from: node, to: node.right });
-                    assignPositions(node.right, x + spread, y + levelHeight, spread / 2);
+                    assignPositions(node.right, childX_R, childY, spread / 2);
+                } else {
+                    nullPositions.push({ parentId: node.id, side: 'right', x: childX_R, y: childY, parentX: x, parentY: y });
+                    minX = Math.min(minX, childX_R);
+                    maxX = Math.max(maxX, childX_R);
                 }
             }
-            
+
             const initialSpread = Math.pow(2, treeHeight - 1) * 25;
             assignPositions(root, 0, 30, initialSpread);
-            
+
             // Normalize positions
             const offsetX = -minX + 40;
             nodes.forEach(n => n.x += offsetX);
-            
+            nullPositions.forEach(np => { np.x += offsetX; np.parentX += offsetX; });
+
             return {
                 nodes,
                 edges,
+                nullPositions,
                 width: maxX - minX + 80,
                 height: treeHeight * levelHeight + 40
             };
@@ -1097,7 +1183,7 @@
         let currentStep = 0;
         let isPlaying = false;
         let playInterval = null;
-        let completedNodes = new Set();
+        let completedNodes = new Map(); // nodeId -> return value
         
         // DOM Elements
         const treeInput = document.getElementById('treeInput');
@@ -1124,7 +1210,7 @@
         
         let currentSelectedProblem = null;
         let cachedProblems = {};
-        let currentLanguage = 'javascript';
+        let currentLanguage = 'python';
 
         // Language toggle
         const langBtns = document.querySelectorAll('.lang-btn');
@@ -1481,9 +1567,10 @@
             
             const { nodes, edges, width, height } = treeLayout;
             
-            treeSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            const padTop = 40; // room for return labels above root
+            treeSvg.setAttribute('viewBox', `0 -${padTop} ${width} ${height + padTop}`);
             treeSvg.style.width = `${Math.min(width, 400)}px`;
-            treeSvg.style.height = `${Math.min(height, 250)}px`;
+            treeSvg.style.height = `${Math.min(height + padTop, 300)}px`;
             
             // Build SVG content
             let svg = '';
@@ -1495,6 +1582,19 @@
                          x2="${e.to.x}" y2="${e.to.y}"/>`;
             });
             
+            // Null edges and nodes (rendered before real nodes so they appear behind)
+            treeLayout.nullPositions.forEach(np => {
+                svg += `<line class="null-edge" id="null-edge-${np.parentId}-${np.side}"
+                         x1="${np.parentX}" y1="${np.parentY}"
+                         x2="${np.x}" y2="${np.y}"/>`;
+            });
+            treeLayout.nullPositions.forEach(np => {
+                svg += `<g class="null-node" id="null-${np.parentId}-${np.side}">
+                    <circle cx="${np.x}" cy="${np.y}" r="14"/>
+                    <text x="${np.x}" y="${np.y + 3}" text-anchor="middle">null</text>
+                </g>`;
+            });
+
             // Nodes
             const colors = ['#7fc8f8', '#82aaff', '#c792ea', '#f78c6c', '#c3e88d', '#ffcb6b', '#ff7eb6'];
             nodes.forEach((n, i) => {
@@ -1504,7 +1604,7 @@
                     <text x="${n.x}" y="${n.y + 5}" text-anchor="middle" fill="#1a1a2e">${n.val}</text>
                 </g>`;
             });
-            
+
             treeSvg.innerHTML = svg;
         }
         
@@ -1521,9 +1621,9 @@
             prevBtn.disabled = currentStep === 0;
             nextBtn.disabled = currentStep === tracer.steps.length - 1;
             
-            // Track completed nodes
+            // Track completed nodes with their return values
             if (step.type === 'return' && step.nodeId !== null) {
-                completedNodes.add(step.nodeId);
+                completedNodes.set(step.nodeId, step.result);
             }
             
             // Update tree nodes
@@ -1531,7 +1631,7 @@
                 const nodeEl = document.getElementById(`node-${n.id}`);
                 if (nodeEl) {
                     nodeEl.classList.remove('active', 'returning', 'completed');
-                    
+
                     if (step.activeNode === n.id && step.type === 'call') {
                         nodeEl.classList.add('active');
                     } else if (step.returningNode === n.id && step.type === 'return') {
@@ -1540,6 +1640,98 @@
                         nodeEl.classList.add('completed');
                     }
                 }
+            });
+
+            // Update null node visibility
+            treeLayout.nullPositions.forEach(np => {
+                const nullEl = document.getElementById(`null-${np.parentId}-${np.side}`);
+                const nullEdge = document.getElementById(`null-edge-${np.parentId}-${np.side}`);
+                if (!nullEl || !nullEdge) return;
+                nullEl.classList.remove('active', 'visible');
+                nullEdge.classList.remove('active', 'visible');
+            });
+
+            // Determine which null node is active (if current step involves null)
+            if (step.nodeId === null && step.nodeVal === null && step.stack.length >= 2) {
+                const parentFrame = step.stack[step.stack.length - 2];
+                const parentId = parentFrame.nodeId;
+                if (parentId !== null) {
+                    // Count prior null calls from this parent to determine left vs right
+                    let nullCount = 0;
+                    for (let i = 0; i < currentStep; i++) {
+                        const s = tracer.steps[i];
+                        if (s.type === 'call' && s.nodeId === null && s.stack.length >= 2) {
+                            const pf = s.stack[s.stack.length - 2];
+                            if (pf.nodeId === parentId) nullCount++;
+                        }
+                    }
+                    // Find which null positions belong to this parent
+                    const parentNulls = treeLayout.nullPositions.filter(np => np.parentId === parentId);
+                    const target = parentNulls[nullCount] || parentNulls[0];
+                    if (target) {
+                        const el = document.getElementById(`null-${target.parentId}-${target.side}`);
+                        const edge = document.getElementById(`null-edge-${target.parentId}-${target.side}`);
+                        if (el) el.classList.add('active');
+                        if (edge) edge.classList.add('active');
+                    }
+                }
+            }
+
+            // Show null nodes that have been visited (completed)
+            const visitedNulls = new Set();
+            for (let i = 0; i <= currentStep; i++) {
+                const s = tracer.steps[i];
+                if (s.type === 'return' && s.nodeId === null && s.stack.length >= 1) {
+                    // The parent is the frame that will be on top after this null returns
+                    const parentFrame = s.stack.length >= 2 ? s.stack[s.stack.length - 2] : null;
+                    if (parentFrame && parentFrame.nodeId !== null) {
+                        // Count which null this was
+                        let nullIdx = 0;
+                        for (let j = 0; j < i; j++) {
+                            const ps = tracer.steps[j];
+                            if (ps.type === 'return' && ps.nodeId === null && ps.stack.length >= 2) {
+                                const ppf = ps.stack[ps.stack.length - 2];
+                                if (ppf.nodeId === parentFrame.nodeId) nullIdx++;
+                            }
+                        }
+                        const parentNulls = treeLayout.nullPositions.filter(np => np.parentId === parentFrame.nodeId);
+                        const target = parentNulls[nullIdx] || parentNulls[0];
+                        if (target) visitedNulls.add(`null-${target.parentId}-${target.side}`);
+                    }
+                }
+            }
+            visitedNulls.forEach(id => {
+                const el = document.getElementById(id);
+                const edge = document.getElementById(id.replace('null-', 'null-edge-'));
+                if (el && !el.classList.contains('active')) el.classList.add('visible');
+                if (edge && !edge.classList.contains('active')) edge.classList.add('visible');
+            });
+
+            // Render return value labels on tree
+            treeSvg.querySelectorAll('.return-label').forEach(el => el.remove());
+            treeLayout.nodes.forEach(n => {
+                const isReturningNow = step.type === 'return' && step.returningNode === n.id;
+                const hasReturned = completedNodes.has(n.id);
+                if (!isReturningNow && !hasReturned) return;
+
+                const val = isReturningNow ? step.result : completedNodes.get(n.id);
+                const label = String(val === null || val === undefined ? 'null' : val);
+                const labelWidth = Math.max(label.length * 7.5 + 12, 28);
+                const lx = n.x;
+                const ly = n.y - 32;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('return-label');
+                if (isReturningNow) g.classList.add('active');
+
+                // Arrow pointing up from node
+                g.innerHTML = `
+                    <line class="return-arrow" x1="${lx}" y1="${n.y - 20}" x2="${lx}" y2="${ly + 8}"/>
+                    <polygon class="return-arrow-head" points="${lx - 3},${ly + 10} ${lx + 3},${ly + 10} ${lx},${ly + 5}"/>
+                    <rect x="${lx - labelWidth/2}" y="${ly - 9}" width="${labelWidth}" height="18"/>
+                    <text x="${lx}" y="${ly + 4}" text-anchor="middle">${label}</text>
+                `;
+                treeSvg.appendChild(g);
             });
             
             // Update call stack
@@ -1620,25 +1812,41 @@
             }
         });
         
+        function getSpeed() {
+            return Math.round(3000 / Math.pow(1.45, speedSlider.value - 1));
+        }
+
         function startPlaying() {
             isPlaying = true;
             playBtn.textContent = '⏸ Pause';
-            const speed = 1100 - speedSlider.value * 100;
-            playInterval = setInterval(() => {
+            function tick() {
+                if (!isPlaying) return;
                 if (currentStep < tracer.steps.length - 1) {
                     currentStep++;
                     updateVisualization();
+                    playInterval = setTimeout(tick, getSpeed());
                 } else {
                     stopPlaying();
                 }
-            }, speed);
+            }
+            playInterval = setTimeout(tick, getSpeed());
         }
+
+        // Update speed live while playing
+        speedSlider.addEventListener('input', () => {
+            if (isPlaying) {
+                clearTimeout(playInterval);
+                playInterval = setTimeout(() => {
+                    if (isPlaying) startPlaying();
+                }, getSpeed());
+            }
+        });
         
         function stopPlaying() {
             isPlaying = false;
             playBtn.textContent = '▶ Play';
             if (playInterval) {
-                clearInterval(playInterval);
+                clearTimeout(playInterval);
                 playInterval = null;
             }
         }
