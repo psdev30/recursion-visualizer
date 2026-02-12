@@ -679,6 +679,159 @@
             font-weight: 600;
         }
 
+        /* Viz tabs */
+        .viz-tab {
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 3px;
+            transition: all 0.2s;
+            margin-right: 4px;
+        }
+        .viz-tab:hover {
+            color: #7fc8f8;
+        }
+        .viz-tab.active {
+            background: rgba(127, 200, 248, 0.15);
+            color: #7fc8f8;
+        }
+
+        /* Code highlight view */
+        .code-highlight-view {
+            flex: 1;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.6;
+            background: #1a1a2e;
+            border-radius: 6px;
+            padding: 6px 0;
+        }
+        .code-line {
+            display: flex;
+            padding: 1px 10px;
+            transition: background 0.2s;
+        }
+        .code-line.active-call {
+            background: rgba(127, 200, 248, 0.15);
+        }
+        .code-line.active-return {
+            background: rgba(195, 232, 141, 0.15);
+        }
+        .code-line-num {
+            color: #4a5568;
+            min-width: 28px;
+            text-align: right;
+            padding-right: 10px;
+            user-select: none;
+        }
+        .code-line-text {
+            color: #a0aec0;
+            white-space: pre;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .code-line.active-call .code-line-text {
+            color: #7fc8f8;
+        }
+        .code-line.active-return .code-line-text {
+            color: #c3e88d;
+        }
+
+        /* Call tree viz */
+        .call-tree-viz {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+        }
+        .ct-node rect {
+            rx: 4;
+            ry: 4;
+            transition: all 0.3s;
+        }
+        .ct-node text {
+            font-family: 'Monaco', monospace;
+            font-size: 10px;
+            fill: #eee;
+        }
+        .ct-node.ct-active rect {
+            stroke: #7fc8f8;
+            stroke-width: 2;
+            filter: drop-shadow(0 0 6px rgba(127, 200, 248, 0.6));
+        }
+        .ct-node.ct-completed rect {
+            opacity: 0.5;
+        }
+        .ct-node.ct-pending {
+            opacity: 0.2;
+        }
+        .ct-edge {
+            stroke: #4a5568;
+            stroke-width: 1.5;
+            fill: none;
+        }
+        .ct-return-val {
+            font-family: 'Monaco', monospace;
+            font-size: 9px;
+            fill: #c3e88d;
+        }
+
+        /* Graph node styles */
+        .graph-node circle {
+            transition: all 0.3s ease;
+        }
+        .graph-node text {
+            font-family: 'Monaco', monospace;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .graph-node.active circle {
+            stroke: #fff;
+            stroke-width: 3;
+            filter: drop-shadow(0 0 8px rgba(127, 200, 248, 0.8));
+        }
+        .graph-node.visited circle {
+            opacity: 0.7;
+        }
+        .graph-edge {
+            stroke: #4a5568;
+            stroke-width: 2;
+            transition: all 0.3s;
+        }
+        .graph-edge.active {
+            stroke: #7fc8f8;
+            stroke-width: 3;
+        }
+        .graph-edge.visited {
+            stroke: #c3e88d;
+            opacity: 0.5;
+        }
+
+        /* Mode toggle */
+        .mode-toggle {
+            display: flex;
+            gap: 6px;
+        }
+        .mode-btn {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            color: #a0aec0;
+            padding: 5px 14px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-btn:hover {
+            background: #4a5568;
+        }
+        .mode-btn.active {
+            background: #f8a07f;
+            color: #1a1a2e;
+            border-color: #f8a07f;
+            font-weight: 600;
+        }
+
         /* Error display */
         .error-msg {
             background: rgba(255, 100, 100, 0.1);
@@ -763,9 +916,36 @@
         <!-- Editor Panel -->
         <div class="editor-panel">
             <div class="editor-section" draggable="true">
+                <div class="section-title"><span class="drag-handle">⠿</span>Mode</div>
+                <div class="mode-toggle">
+                    <button class="mode-btn active" data-mode="tree">Tree</button>
+                    <button class="mode-btn" data-mode="graph">Graph</button>
+                    <button class="mode-btn" data-mode="backtrack">Backtrack</button>
+                </div>
+            </div>
+
+            <div class="editor-section" draggable="true" id="treeInputSection">
                 <div class="section-title"><span class="drag-handle">⠿</span>Tree Structure</div>
                 <textarea class="tree-input" id="treeInput" rows="3" placeholder="e.g. [1, 2, 3, 4, 5]">[1, 2, 3, 4, 5, null, null]</textarea>
                 <div class="help-text">Array format (level-order). Use null for empty nodes.</div>
+            </div>
+
+            <div class="editor-section" draggable="true" id="graphInputSection" style="display:none;">
+                <div class="section-title"><span class="drag-handle">⠿</span>Graph (Adjacency List)</div>
+                <textarea class="tree-input" id="graphInput" rows="3" placeholder='{"0": [1,2], "1": [0,3], "2": [0], "3": [1]}'>{"0": [1, 2], "1": [0, 3], "2": [0], "3": [1]}</textarea>
+                <div style="margin-top: 6px;">
+                    <label style="color: #636d83; font-size: 10px;">Start Node:</label>
+                    <input class="tree-input" id="graphStartNode" style="width: 60px; display: inline-block; padding: 4px 8px; margin-left: 6px;" value="0" placeholder="0">
+                </div>
+                <div class="help-text">JSON adjacency list. Keys are node IDs, values are neighbor arrays.</div>
+            </div>
+
+            <div class="editor-section" draggable="true" id="backtrackInputSection" style="display:none;">
+                <div class="section-title"><span class="drag-handle">⠿</span>Backtrack Input</div>
+                <textarea class="tree-input" id="backtrackCandidates" rows="2" placeholder="[2, 3, 6, 7]">[2, 3, 6, 7]</textarea>
+                <div class="help-text" style="margin-bottom: 6px;">Candidates array (JSON)</div>
+                <input class="tree-input" id="backtrackTarget" placeholder="Target value, e.g. 7" value="7">
+                <div class="help-text">Target or constraint value</div>
             </div>
             
             <div class="editor-section" draggable="true">
@@ -831,7 +1011,7 @@
             <div class="viz-content" id="vizContent">
                 <!-- Row 1 -->
                 <div class="viz-card">
-                    <div class="viz-card-title">Tree</div>
+                    <div class="viz-card-title" id="primaryVizTitle">Tree</div>
                     <div class="tree-viz" id="treeViz">
                         <svg class="tree-svg" id="treeSvg"></svg>
                     </div>
@@ -849,16 +1029,28 @@
 
                 <!-- Row 2 -->
                 <div class="viz-card">
-                    <div class="viz-card-title">Global Variables</div>
+                    <div class="viz-card-title">
+                        <span class="viz-tab active" data-tab="vars">Variables</span>
+                        <span class="viz-tab" data-tab="code">Code</span>
+                    </div>
                     <div class="vars-grid" id="varsGrid">
                         <div class="stack-empty">No variables defined</div>
+                    </div>
+                    <div class="code-highlight-view" id="codeHighlightView" style="display:none;">
+                        <div class="stack-empty">Run to see code</div>
                     </div>
                 </div>
                 <div class="viz-splitter-v" id="vizSplitV2" data-row="bottom"></div>
                 <div class="viz-card">
-                    <div class="viz-card-title">Execution Trace</div>
+                    <div class="viz-card-title">
+                        <span class="viz-tab active" data-tab="trace">Trace</span>
+                        <span class="viz-tab" data-tab="calltree">Call Tree</span>
+                    </div>
                     <div class="trace-log" id="traceLog">
                         <div class="stack-empty">Run to see trace</div>
+                    </div>
+                    <div class="call-tree-viz" id="callTreeViz" style="display:none;">
+                        <svg class="tree-svg" id="callTreeSvg"></svg>
                     </div>
                 </div>
             </div>
@@ -1179,11 +1371,35 @@
         // UI State
         let tree = null;
         let treeLayout = null;
+        let graphLayout = null;
+        let callTree = null;
+        let callTreeLayout = null;
         let tracer = null;
         let currentStep = 0;
         let isPlaying = false;
         let playInterval = null;
         let completedNodes = new Map(); // nodeId -> return value
+        let visitedGraphNodes = new Set();
+
+        // Helper to execute Python on server
+        async function executePython(payload) {
+            const response = await fetch('/api/execute-python', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const text = await response.text();
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch (_) {
+                throw new Error(response.ok ? 'Invalid response from server' : 'Server not running or endpoint missing — restart the server');
+            }
+            if (result.error) {
+                throw new Error(result.error);
+            }
+            return result;
+        }
         
         // DOM Elements
         const treeInput = document.getElementById('treeInput');
@@ -1211,6 +1427,49 @@
         let currentSelectedProblem = null;
         let cachedProblems = {};
         let currentLanguage = 'python';
+        let currentMode = 'tree';
+
+        // Mode toggle
+        const modeBtns = document.querySelectorAll('.mode-btn');
+
+        function setMode(mode) {
+            currentMode = mode;
+            modeBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+            // Show/hide input sections
+            document.getElementById('treeInputSection').style.display = mode === 'tree' ? '' : 'none';
+            document.getElementById('graphInputSection').style.display = mode === 'graph' ? '' : 'none';
+            document.getElementById('backtrackInputSection').style.display = mode === 'backtrack' ? '' : 'none';
+
+            // Update help text based on mode
+            const helpEl = document.getElementById('langHelpText');
+            if (mode === 'graph') {
+                helpEl.innerHTML = currentLanguage === 'python'
+                    ? `Use <code>node</code> (current node ID), <code>graph</code> (adjacency dict), <code>visited</code> (set)<br>
+                       Use <code>globals["varName"]</code> for tracked variables<br>
+                       The function receives (node, graph, visited, globals)`
+                    : `Use <code>node</code> (current node ID), <code>graph</code> (adjacency object), <code>visited</code> (Set)<br>
+                       Use <code>globals.varName</code> for tracked variables<br>
+                       The function receives (node, graph, visited, globals)`;
+            } else if (mode === 'backtrack') {
+                helpEl.innerHTML = currentLanguage === 'python'
+                    ? `Use <code>candidates</code>, <code>target</code>, <code>path</code> (list)<br>
+                       Use <code>globals["varName"]</code> for tracked variables<br>
+                       The function receives (candidates, target, path, globals)`
+                    : `Use <code>candidates</code>, <code>target</code>, <code>path</code> (array)<br>
+                       Use <code>globals.varName</code> for tracked variables<br>
+                       The function receives (candidates, target, path, globals)`;
+            } else {
+                // tree mode - delegate to setLanguage to get correct lang-specific text
+                setLanguage(currentLanguage);
+                return;
+            }
+        }
+
+        modeBtns.forEach(btn => {
+            btn.addEventListener('click', () => setMode(btn.dataset.mode));
+        });
 
         // Language toggle
         const langBtns = document.querySelectorAll('.lang-btn');
@@ -1257,10 +1516,25 @@
                 const problem = cachedProblems[problemId];
 
                 if (problem) {
-                    treeInput.value = problem.tree;
+                    const problemMode = problem.mode || 'tree';
+                    setMode(problemMode);
+                    setLanguage(problem.language || 'javascript');
+
+                    if (problemMode === 'graph') {
+                        document.getElementById('graphInput').value = problem.tree;
+                    } else if (problemMode === 'backtrack') {
+                        try {
+                            const bt = JSON.parse(problem.tree);
+                            document.getElementById('backtrackCandidates').value = bt.candidates || problem.tree;
+                            document.getElementById('backtrackTarget').value = bt.target || '';
+                        } catch (_) {
+                            document.getElementById('backtrackCandidates').value = problem.tree;
+                        }
+                    } else {
+                        treeInput.value = problem.tree;
+                    }
                     globalsInput.value = problem.globals;
                     codeInput.value = problem.code;
-                    setLanguage(problem.language || 'javascript');
 
                     if (problem.url || problem.notes) {
                         problemInfoSection.style.display = 'block';
@@ -1309,14 +1583,23 @@
                 return;
             }
             
+            // Get the appropriate input based on mode
+            let inputData = treeInput.value;
+            if (currentMode === 'graph') {
+                inputData = document.getElementById('graphInput').value;
+            } else if (currentMode === 'backtrack') {
+                inputData = JSON.stringify({ candidates: document.getElementById('backtrackCandidates').value, target: document.getElementById('backtrackTarget').value });
+            }
+
             const problem = {
                 name: name,
-                tree: treeInput.value,
+                tree: inputData,
                 globals: globalsInput.value,
                 code: code,
                 url: document.getElementById('problemUrl').value.trim(),
                 notes: document.getElementById('problemNotes').value.trim(),
-                language: currentLanguage
+                language: currentLanguage,
+                mode: currentMode
             };
             
             const saved = await saveProblem(problem);
@@ -1492,13 +1775,9 @@
         async function runVisualization() {
             errorDisplay.innerHTML = '';
             completedNodes.clear();
+            graphLayout = null;
 
             try {
-                // Parse tree
-                const treeArr = JSON.parse(treeInput.value);
-                tree = buildTree(treeArr);
-                treeLayout = calculatePositions(tree);
-
                 // Parse globals
                 let globals = {};
                 if (globalsInput.value.trim()) {
@@ -1509,41 +1788,67 @@
                 const code = codeInput.value;
                 if (!code.trim()) throw new Error("Please enter a function");
 
-                if (currentLanguage === 'python') {
-                    // Python path: send to server
+                if (currentMode === 'tree') {
+                    // Parse tree
+                    const treeArr = JSON.parse(treeInput.value);
+                    tree = buildTree(treeArr);
+                    treeLayout = calculatePositions(tree);
+
+                    if (currentLanguage === 'python') {
+                        runBtn.textContent = '⏳ Running...';
+                        runBtn.disabled = true;
+                        try {
+                            const result = await executePython({ code, tree: treeArr, globals, mode: 'tree' });
+                            tracer = { steps: result.steps, lineMap: result.lineMap };
+                        } finally {
+                            runBtn.textContent = '▶ Run Visualization';
+                            runBtn.disabled = false;
+                        }
+                    } else {
+                        tracer = new ExecutionTracer(tree, globals, code);
+                    }
+                } else if (currentMode === 'graph') {
+                    const adjList = JSON.parse(document.getElementById('graphInput').value);
+                    const startNode = parseInt(document.getElementById('graphStartNode').value) || 0;
+                    graphLayout = calculateGraphPositions(adjList);
+                    tree = null;
+                    treeLayout = null;
+
                     runBtn.textContent = '⏳ Running...';
                     runBtn.disabled = true;
-
                     try {
-                        const response = await fetch('/api/execute-python', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ code, tree: treeArr, globals })
-                        });
-
-                        const text = await response.text();
-                        let result;
-                        try {
-                            result = JSON.parse(text);
-                        } catch (_) {
-                            throw new Error(response.ok ? 'Invalid response from server' : 'Server not running or endpoint missing — restart the server');
-                        }
-
-                        if (result.error) {
-                            throw new Error(result.error);
-                        }
-
-                        tracer = { steps: result.steps };
+                        const result = await executePython({ code, graph: adjList, startNode, globals, mode: 'graph' });
+                        tracer = { steps: result.steps, lineMap: result.lineMap };
                     } finally {
                         runBtn.textContent = '▶ Run Visualization';
                         runBtn.disabled = false;
                     }
-                } else {
-                    // JavaScript path: use ExecutionTracer as before
-                    tracer = new ExecutionTracer(tree, globals, code);
+                } else if (currentMode === 'backtrack') {
+                    const candidates = JSON.parse(document.getElementById('backtrackCandidates').value);
+                    const target = document.getElementById('backtrackTarget').value.trim();
+                    // Try to parse target as number, otherwise keep as string
+                    let parsedTarget = target;
+                    if (!isNaN(target) && target !== '') parsedTarget = Number(target);
+                    tree = null;
+                    treeLayout = null;
+                    graphLayout = null;
+
+                    runBtn.textContent = '⏳ Running...';
+                    runBtn.disabled = true;
+                    try {
+                        const result = await executePython({ code, candidates, target: parsedTarget, globals, mode: 'backtrack' });
+                        tracer = { steps: result.steps, lineMap: result.lineMap };
+                    } finally {
+                        runBtn.textContent = '▶ Run Visualization';
+                        runBtn.disabled = false;
+                    }
                 }
 
                 currentStep = 0;
+
+                // Build call tree for all modes
+                callTree = buildCallTree(tracer.steps);
+                callTreeLayout = calculateCallTreePositions(callTree);
 
                 // Enable controls
                 prevBtn.disabled = false;
@@ -1551,8 +1856,17 @@
                 playBtn.disabled = false;
                 resetBtn.disabled = false;
 
-                // Render tree
-                renderTree();
+                // Render primary visualization
+                if (currentMode === 'tree') {
+                    renderTree();
+                } else if (currentMode === 'graph') {
+                    renderGraph();
+                } else if (currentMode === 'backtrack') {
+                    renderDecisionTree();
+                }
+
+                // Render call tree
+                renderCallTree();
 
                 // Update UI
                 updateVisualization();
@@ -1607,133 +1921,496 @@
 
             treeSvg.innerHTML = svg;
         }
-        
+
+        // ======== Call Tree ========
+        function buildCallTree(steps) {
+            const root = { id: 0, name: 'root', children: [], step: -1, returnStep: Infinity };
+            const stack = [root];
+            let nextId = 1;
+
+            steps.forEach((s, i) => {
+                if (s.type === 'call') {
+                    const node = {
+                        id: nextId++, name: s.funcName,
+                        nodeVal: s.nodeVal, children: [],
+                        step: i, returnStep: Infinity, result: null
+                    };
+                    stack[stack.length - 1].children.push(node);
+                    stack.push(node);
+                } else if (s.type === 'return') {
+                    if (stack.length > 1) {
+                        const node = stack[stack.length - 1];
+                        node.result = s.result;
+                        node.returnStep = i;
+                        stack.pop();
+                    }
+                }
+            });
+            return root.children[0] || root;
+        }
+
+        function calculateCallTreePositions(node, depth, yCounter) {
+            if (!node) return { nodes: [], edges: [], width: 0, height: 0 };
+
+            depth = depth || 0;
+            yCounter = yCounter || { val: 0 };
+
+            const nodes = [];
+            const edges = [];
+            const xSpacing = 160;
+            const ySpacing = 28;
+
+            function layout(n, d) {
+                if (n.children.length === 0) {
+                    n.cx = d * xSpacing + 60;
+                    n.cy = yCounter.val * ySpacing + 20;
+                    yCounter.val++;
+                    nodes.push(n);
+                    return;
+                }
+                for (const child of n.children) {
+                    layout(child, d + 1);
+                    edges.push({ from: n, to: child });
+                }
+                // Position parent at vertical center of children
+                const firstChild = n.children[0];
+                const lastChild = n.children[n.children.length - 1];
+                n.cx = d * xSpacing + 60;
+                n.cy = (firstChild.cy + lastChild.cy) / 2;
+                nodes.push(n);
+            }
+
+            layout(node, 0);
+
+            const maxX = Math.max(...nodes.map(n => n.cx)) + 100;
+            const maxY = yCounter.val * ySpacing + 10;
+
+            return { nodes, edges, width: maxX, height: maxY };
+        }
+
+        function renderCallTree() {
+            const svg = document.getElementById('callTreeSvg');
+            if (!callTreeLayout || !callTree) {
+                svg.innerHTML = '<text x="10" y="20" fill="#636d83" font-size="12">Run to see call tree</text>';
+                return;
+            }
+
+            const { nodes, edges, width, height } = callTreeLayout;
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            svg.style.width = `${Math.max(width, 200)}px`;
+            svg.style.height = `${Math.max(height, 100)}px`;
+
+            let svgContent = '';
+
+            // Edges
+            edges.forEach(e => {
+                svgContent += `<path class="ct-edge" d="M${e.from.cx + 55},${e.from.cy} C${e.from.cx + 90},${e.from.cy} ${e.to.cx - 30},${e.to.cy} ${e.to.cx - 5},${e.to.cy}"/>`;
+            });
+
+            // Nodes
+            nodes.forEach(n => {
+                const label = `${n.name}(${n.nodeVal === null || n.nodeVal === undefined ? 'null' : n.nodeVal})`;
+                const boxW = Math.max(label.length * 6.5 + 16, 50);
+                svgContent += `<g class="ct-node" id="ct-${n.id}" data-step="${n.step}" data-return="${n.returnStep}">
+                    <rect x="${n.cx - 5}" y="${n.cy - 10}" width="${boxW}" height="20" fill="#2d3748" stroke="#4a5568" stroke-width="1"/>
+                    <text x="${n.cx + boxW/2 - 5}" y="${n.cy + 4}" text-anchor="middle">${label}</text>
+                </g>`;
+            });
+
+            svg.innerHTML = svgContent;
+        }
+
+        // ======== Graph Layout ========
+        function calculateGraphPositions(adjList) {
+            const nodeIds = Object.keys(adjList).map(Number);
+            const n = nodeIds.length;
+            const width = 300, height = 300;
+            const cx = width / 2, cy = height / 2;
+            const radius = Math.min(cx, cy) - 40;
+
+            const positions = {};
+            nodeIds.forEach((id, i) => {
+                const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+                positions[id] = {
+                    x: cx + radius * Math.cos(angle),
+                    y: cy + radius * Math.sin(angle),
+                    id: id
+                };
+            });
+
+            // Build edges (deduplicated)
+            const edgeSet = new Set();
+            const edges = [];
+            for (const [from, neighbors] of Object.entries(adjList)) {
+                for (const to of neighbors) {
+                    const key = [Math.min(+from, +to), Math.max(+from, +to)].join('-');
+                    if (!edgeSet.has(key)) {
+                        edgeSet.add(key);
+                        edges.push({ from: +from, to: +to });
+                    }
+                }
+            }
+
+            return { positions, edges, nodeIds, width, height, adjList };
+        }
+
+        function renderGraph() {
+            if (!graphLayout) return;
+
+            const { positions, edges, nodeIds, width, height } = graphLayout;
+            const svg = treeSvg;
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            svg.style.width = `${Math.min(width, 400)}px`;
+            svg.style.height = `${Math.min(height, 300)}px`;
+
+            const colors = ['#7fc8f8', '#82aaff', '#c792ea', '#f78c6c', '#c3e88d', '#ffcb6b', '#ff7eb6'];
+            let svgContent = '';
+
+            // Edges
+            edges.forEach(e => {
+                const p1 = positions[e.from], p2 = positions[e.to];
+                svgContent += `<line class="graph-edge" id="ge-${e.from}-${e.to}" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"/>`;
+            });
+
+            // Nodes
+            nodeIds.forEach((id, i) => {
+                const p = positions[id];
+                const color = colors[i % colors.length];
+                svgContent += `<g class="graph-node" id="gn-${id}">
+                    <circle cx="${p.x}" cy="${p.y}" r="20" fill="${color}"/>
+                    <text x="${p.x}" y="${p.y + 5}" text-anchor="middle" fill="#1a1a2e">${id}</text>
+                </g>`;
+            });
+
+            svg.innerHTML = svgContent;
+        }
+
+        // ======== Decision Tree (Backtracking) ========
+        function renderDecisionTree() {
+            // For backtracking, we reuse the call tree as the decision tree
+            if (!callTree || !callTreeLayout) {
+                treeSvg.innerHTML = '<text x="10" y="20" fill="#636d83" font-size="12">Run to see decision tree</text>';
+                return;
+            }
+
+            const { nodes, edges, width, height } = callTreeLayout;
+            treeSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            treeSvg.style.width = `${Math.max(width, 200)}px`;
+            treeSvg.style.height = `${Math.max(height, 100)}px`;
+
+            let svgContent = '';
+
+            // Edges
+            edges.forEach(e => {
+                svgContent += `<path class="ct-edge" id="dt-edge-${e.from.id}-${e.to.id}" d="M${e.from.cx + 55},${e.from.cy} C${e.from.cx + 90},${e.from.cy} ${e.to.cx - 30},${e.to.cy} ${e.to.cx - 5},${e.to.cy}"/>`;
+            });
+
+            // Nodes
+            nodes.forEach(n => {
+                const label = `${n.nodeVal === null || n.nodeVal === undefined ? '()' : n.nodeVal}`;
+                const boxW = Math.max(label.length * 7 + 16, 40);
+                svgContent += `<g class="ct-node" id="dt-${n.id}" data-step="${n.step}" data-return="${n.returnStep}">
+                    <rect x="${n.cx - 5}" y="${n.cy - 10}" width="${boxW}" height="20" fill="#2d3748" stroke="#4a5568" stroke-width="1"/>
+                    <text x="${n.cx + boxW/2 - 5}" y="${n.cy + 4}" text-anchor="middle">${label}</text>
+                </g>`;
+            });
+
+            treeSvg.innerHTML = svgContent;
+        }
+
+        // ======== Viz Tab Switching ========
+        document.querySelectorAll('.viz-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Toggle active state within the same card title
+                const title = this.parentElement;
+                title.querySelectorAll('.viz-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+
+                const card = title.parentElement;
+                const tabName = this.dataset.tab;
+
+                if (tabName === 'vars') {
+                    card.querySelector('#varsGrid').style.display = '';
+                    card.querySelector('#codeHighlightView').style.display = 'none';
+                } else if (tabName === 'code') {
+                    card.querySelector('#varsGrid').style.display = 'none';
+                    card.querySelector('#codeHighlightView').style.display = '';
+                    renderCodeHighlight();
+                } else if (tabName === 'trace') {
+                    card.querySelector('#traceLog').style.display = '';
+                    card.querySelector('#callTreeViz').style.display = 'none';
+                } else if (tabName === 'calltree') {
+                    card.querySelector('#traceLog').style.display = 'none';
+                    card.querySelector('#callTreeViz').style.display = '';
+                }
+            });
+        });
+
+        // ======== Code Highlighting ========
+        let lineMap = {};
+
+        function buildLineMap(code, language) {
+            const map = {};
+            code.split('\n').forEach((line, i) => {
+                let m;
+                if (language === 'python') {
+                    m = line.match(/def\s+(\w+)\s*\(/);
+                } else {
+                    m = line.match(/function\s+(\w+)\s*\(/);
+                }
+                if (m) map[m[1]] = i + 1;
+            });
+            return map;
+        }
+
+        function renderCodeHighlight() {
+            const container = document.getElementById('codeHighlightView');
+            const code = codeInput.value;
+            if (!code.trim()) {
+                container.innerHTML = '<div class="stack-empty">No code to display</div>';
+                return;
+            }
+
+            // Build lineMap from either server response or locally
+            if (tracer && tracer.lineMap) {
+                lineMap = tracer.lineMap;
+            } else {
+                lineMap = buildLineMap(code, currentLanguage);
+            }
+
+            const lines = code.split('\n');
+            container.innerHTML = lines.map((line, i) => {
+                return `<div class="code-line" id="code-line-${i + 1}">
+                    <span class="code-line-num">${i + 1}</span>
+                    <span class="code-line-text">${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function updateCodeHighlight(step) {
+            if (!step || !lineMap) return;
+            // Clear all highlights
+            document.querySelectorAll('.code-line').forEach(el => {
+                el.classList.remove('active-call', 'active-return');
+            });
+            // Highlight the line for the current function
+            const lineNum = lineMap[step.funcName];
+            if (lineNum) {
+                const lineEl = document.getElementById(`code-line-${lineNum}`);
+                if (lineEl) {
+                    lineEl.classList.add(step.type === 'call' ? 'active-call' : 'active-return');
+                    lineEl.scrollIntoView({ block: 'nearest' });
+                }
+            }
+        }
+
         function updateVisualization() {
             if (!tracer || tracer.steps.length === 0) return;
-            
+
             const step = tracer.steps[currentStep];
-            
+
             // Update step counter
             stepNum.textContent = currentStep + 1;
             totalSteps.textContent = tracer.steps.length;
-            
+
             // Update buttons
             prevBtn.disabled = currentStep === 0;
             nextBtn.disabled = currentStep === tracer.steps.length - 1;
-            
+
+            // Update primary viz title
+            const titleEl = document.getElementById('primaryVizTitle');
+            if (currentMode === 'graph') titleEl.textContent = 'Graph';
+            else if (currentMode === 'backtrack') titleEl.textContent = 'Decision Tree';
+            else titleEl.textContent = 'Tree';
+
             // Track completed nodes with their return values
-            if (step.type === 'return' && step.nodeId !== null) {
+            if (step.type === 'return' && step.nodeId !== null && step.nodeId !== undefined) {
                 completedNodes.set(step.nodeId, step.result);
             }
-            
-            // Update tree nodes
-            treeLayout.nodes.forEach(n => {
-                const nodeEl = document.getElementById(`node-${n.id}`);
-                if (nodeEl) {
-                    nodeEl.classList.remove('active', 'returning', 'completed');
 
-                    if (step.activeNode === n.id && step.type === 'call') {
-                        nodeEl.classList.add('active');
-                    } else if (step.returningNode === n.id && step.type === 'return') {
-                        nodeEl.classList.add('returning');
-                    } else if (completedNodes.has(n.id)) {
-                        nodeEl.classList.add('completed');
-                    }
-                }
-            });
+            // === MODE-SPECIFIC PRIMARY VIZ ===
+            if (currentMode === 'tree' && treeLayout) {
+                // Update tree nodes
+                treeLayout.nodes.forEach(n => {
+                    const nodeEl = document.getElementById(`node-${n.id}`);
+                    if (nodeEl) {
+                        nodeEl.classList.remove('active', 'returning', 'completed');
 
-            // Update null node visibility
-            treeLayout.nullPositions.forEach(np => {
-                const nullEl = document.getElementById(`null-${np.parentId}-${np.side}`);
-                const nullEdge = document.getElementById(`null-edge-${np.parentId}-${np.side}`);
-                if (!nullEl || !nullEdge) return;
-                nullEl.classList.remove('active', 'visible');
-                nullEdge.classList.remove('active', 'visible');
-            });
-
-            // Determine which null node is active (if current step involves null)
-            if (step.nodeId === null && step.nodeVal === null && step.stack.length >= 2) {
-                const parentFrame = step.stack[step.stack.length - 2];
-                const parentId = parentFrame.nodeId;
-                if (parentId !== null) {
-                    // Count prior null calls from this parent to determine left vs right
-                    let nullCount = 0;
-                    for (let i = 0; i < currentStep; i++) {
-                        const s = tracer.steps[i];
-                        if (s.type === 'call' && s.nodeId === null && s.stack.length >= 2) {
-                            const pf = s.stack[s.stack.length - 2];
-                            if (pf.nodeId === parentId) nullCount++;
+                        if (step.activeNode === n.id && step.type === 'call') {
+                            nodeEl.classList.add('active');
+                        } else if (step.returningNode === n.id && step.type === 'return') {
+                            nodeEl.classList.add('returning');
+                        } else if (completedNodes.has(n.id)) {
+                            nodeEl.classList.add('completed');
                         }
                     }
-                    // Find which null positions belong to this parent
-                    const parentNulls = treeLayout.nullPositions.filter(np => np.parentId === parentId);
-                    const target = parentNulls[nullCount] || parentNulls[0];
-                    if (target) {
-                        const el = document.getElementById(`null-${target.parentId}-${target.side}`);
-                        const edge = document.getElementById(`null-edge-${target.parentId}-${target.side}`);
-                        if (el) el.classList.add('active');
-                        if (edge) edge.classList.add('active');
-                    }
-                }
-            }
+                });
 
-            // Show null nodes that have been visited (completed)
-            const visitedNulls = new Set();
-            for (let i = 0; i <= currentStep; i++) {
-                const s = tracer.steps[i];
-                if (s.type === 'return' && s.nodeId === null && s.stack.length >= 1) {
-                    // The parent is the frame that will be on top after this null returns
-                    const parentFrame = s.stack.length >= 2 ? s.stack[s.stack.length - 2] : null;
-                    if (parentFrame && parentFrame.nodeId !== null) {
-                        // Count which null this was
-                        let nullIdx = 0;
-                        for (let j = 0; j < i; j++) {
-                            const ps = tracer.steps[j];
-                            if (ps.type === 'return' && ps.nodeId === null && ps.stack.length >= 2) {
-                                const ppf = ps.stack[ps.stack.length - 2];
-                                if (ppf.nodeId === parentFrame.nodeId) nullIdx++;
+                // Update null node visibility
+                treeLayout.nullPositions.forEach(np => {
+                    const nullEl = document.getElementById(`null-${np.parentId}-${np.side}`);
+                    const nullEdge = document.getElementById(`null-edge-${np.parentId}-${np.side}`);
+                    if (!nullEl || !nullEdge) return;
+                    nullEl.classList.remove('active', 'visible');
+                    nullEdge.classList.remove('active', 'visible');
+                });
+
+                // Determine which null node is active (if current step involves null)
+                if (step.nodeId === null && step.nodeVal === null && step.stack.length >= 2) {
+                    const parentFrame = step.stack[step.stack.length - 2];
+                    const parentId = parentFrame.nodeId;
+                    if (parentId !== null) {
+                        let nullCount = 0;
+                        for (let i = 0; i < currentStep; i++) {
+                            const s = tracer.steps[i];
+                            if (s.type === 'call' && s.nodeId === null && s.stack.length >= 2) {
+                                const pf = s.stack[s.stack.length - 2];
+                                if (pf.nodeId === parentId) nullCount++;
                             }
                         }
-                        const parentNulls = treeLayout.nullPositions.filter(np => np.parentId === parentFrame.nodeId);
-                        const target = parentNulls[nullIdx] || parentNulls[0];
-                        if (target) visitedNulls.add(`null-${target.parentId}-${target.side}`);
+                        const parentNulls = treeLayout.nullPositions.filter(np => np.parentId === parentId);
+                        const target = parentNulls[nullCount] || parentNulls[0];
+                        if (target) {
+                            const el = document.getElementById(`null-${target.parentId}-${target.side}`);
+                            const edge = document.getElementById(`null-edge-${target.parentId}-${target.side}`);
+                            if (el) el.classList.add('active');
+                            if (edge) edge.classList.add('active');
+                        }
                     }
                 }
+
+                // Show null nodes that have been visited (completed)
+                const visitedNulls = new Set();
+                for (let i = 0; i <= currentStep; i++) {
+                    const s = tracer.steps[i];
+                    if (s.type === 'return' && s.nodeId === null && s.stack.length >= 1) {
+                        const parentFrame = s.stack.length >= 2 ? s.stack[s.stack.length - 2] : null;
+                        if (parentFrame && parentFrame.nodeId !== null) {
+                            let nullIdx = 0;
+                            for (let j = 0; j < i; j++) {
+                                const ps = tracer.steps[j];
+                                if (ps.type === 'return' && ps.nodeId === null && ps.stack.length >= 2) {
+                                    const ppf = ps.stack[ps.stack.length - 2];
+                                    if (ppf.nodeId === parentFrame.nodeId) nullIdx++;
+                                }
+                            }
+                            const parentNulls = treeLayout.nullPositions.filter(np => np.parentId === parentFrame.nodeId);
+                            const target = parentNulls[nullIdx] || parentNulls[0];
+                            if (target) visitedNulls.add(`null-${target.parentId}-${target.side}`);
+                        }
+                    }
+                }
+                visitedNulls.forEach(id => {
+                    const el = document.getElementById(id);
+                    const edge = document.getElementById(id.replace('null-', 'null-edge-'));
+                    if (el && !el.classList.contains('active')) el.classList.add('visible');
+                    if (edge && !edge.classList.contains('active')) edge.classList.add('visible');
+                });
+
+                // Render return value labels on tree
+                treeSvg.querySelectorAll('.return-label').forEach(el => el.remove());
+                treeLayout.nodes.forEach(n => {
+                    const isReturningNow = step.type === 'return' && step.returningNode === n.id;
+                    const hasReturned = completedNodes.has(n.id);
+                    if (!isReturningNow && !hasReturned) return;
+
+                    const val = isReturningNow ? step.result : completedNodes.get(n.id);
+                    const label = String(val === null || val === undefined ? 'null' : val);
+                    const labelWidth = Math.max(label.length * 7.5 + 12, 28);
+                    const lx = n.x;
+                    const ly = n.y - 32;
+
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    g.classList.add('return-label');
+                    if (isReturningNow) g.classList.add('active');
+
+                    g.innerHTML = `
+                        <line class="return-arrow" x1="${lx}" y1="${n.y - 20}" x2="${lx}" y2="${ly + 8}"/>
+                        <polygon class="return-arrow-head" points="${lx - 3},${ly + 10} ${lx + 3},${ly + 10} ${lx},${ly + 5}"/>
+                        <rect x="${lx - labelWidth/2}" y="${ly - 9}" width="${labelWidth}" height="18"/>
+                        <text x="${lx}" y="${ly + 4}" text-anchor="middle">${label}</text>
+                    `;
+                    treeSvg.appendChild(g);
+                });
+            } else if (currentMode === 'graph' && graphLayout) {
+                // Update graph nodes
+                visitedGraphNodes.clear();
+                for (let i = 0; i <= currentStep; i++) {
+                    if (tracer.steps[i].type === 'call' && tracer.steps[i].nodeId !== null) {
+                        visitedGraphNodes.add(tracer.steps[i].nodeId);
+                    }
+                }
+
+                graphLayout.nodeIds.forEach(id => {
+                    const nodeEl = document.getElementById(`gn-${id}`);
+                    if (nodeEl) {
+                        nodeEl.classList.remove('active', 'visited');
+                        if (step.nodeId === id && step.type === 'call') {
+                            nodeEl.classList.add('active');
+                        } else if (visitedGraphNodes.has(id)) {
+                            nodeEl.classList.add('visited');
+                        }
+                    }
+                });
+
+                // Highlight edges
+                graphLayout.edges.forEach(e => {
+                    const edgeEl = document.getElementById(`ge-${e.from}-${e.to}`);
+                    if (edgeEl) {
+                        edgeEl.classList.remove('active', 'visited');
+                        if ((step.nodeId === e.from && visitedGraphNodes.has(e.to)) ||
+                            (step.nodeId === e.to && visitedGraphNodes.has(e.from))) {
+                            edgeEl.classList.add('visited');
+                        }
+                    }
+                });
+            } else if (currentMode === 'backtrack' && callTreeLayout) {
+                // Update decision tree (reusing call tree nodes in primary SVG)
+                callTreeLayout.nodes.forEach(n => {
+                    const el = document.getElementById(`dt-${n.id}`);
+                    if (!el) return;
+                    el.classList.remove('ct-active', 'ct-completed', 'ct-pending');
+                    if (n.step <= currentStep && n.returnStep > currentStep) {
+                        el.classList.add('ct-active');
+                    } else if (n.returnStep <= currentStep) {
+                        el.classList.add('ct-completed');
+                    } else {
+                        el.classList.add('ct-pending');
+                    }
+                });
             }
-            visitedNulls.forEach(id => {
-                const el = document.getElementById(id);
-                const edge = document.getElementById(id.replace('null-', 'null-edge-'));
-                if (el && !el.classList.contains('active')) el.classList.add('visible');
-                if (edge && !edge.classList.contains('active')) edge.classList.add('visible');
-            });
 
-            // Render return value labels on tree
-            treeSvg.querySelectorAll('.return-label').forEach(el => el.remove());
-            treeLayout.nodes.forEach(n => {
-                const isReturningNow = step.type === 'return' && step.returningNode === n.id;
-                const hasReturned = completedNodes.has(n.id);
-                if (!isReturningNow && !hasReturned) return;
+            // === CALL TREE UPDATE (all modes) ===
+            if (callTreeLayout) {
+                callTreeLayout.nodes.forEach(n => {
+                    const el = document.getElementById(`ct-${n.id}`);
+                    if (!el) return;
+                    el.classList.remove('ct-active', 'ct-completed', 'ct-pending');
+                    if (n.step <= currentStep && n.returnStep > currentStep) {
+                        el.classList.add('ct-active');
+                    } else if (n.returnStep <= currentStep) {
+                        el.classList.add('ct-completed');
+                    } else {
+                        el.classList.add('ct-pending');
+                    }
 
-                const val = isReturningNow ? step.result : completedNodes.get(n.id);
-                const label = String(val === null || val === undefined ? 'null' : val);
-                const labelWidth = Math.max(label.length * 7.5 + 12, 28);
-                const lx = n.x;
-                const ly = n.y - 32;
+                    // Show return value
+                    const existingRV = el.querySelector('.ct-return-val');
+                    if (existingRV) existingRV.remove();
+                    if (n.returnStep <= currentStep && n.result !== null && n.result !== undefined) {
+                        const rv = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        rv.classList.add('ct-return-val');
+                        rv.setAttribute('x', n.cx - 5);
+                        rv.setAttribute('y', n.cy + 18);
+                        rv.textContent = `→ ${n.result}`;
+                        el.appendChild(rv);
+                    }
+                });
+            }
 
-                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                g.classList.add('return-label');
-                if (isReturningNow) g.classList.add('active');
+            // === CODE HIGHLIGHT UPDATE ===
+            updateCodeHighlight(step);
 
-                // Arrow pointing up from node
-                g.innerHTML = `
-                    <line class="return-arrow" x1="${lx}" y1="${n.y - 20}" x2="${lx}" y2="${ly + 8}"/>
-                    <polygon class="return-arrow-head" points="${lx - 3},${ly + 10} ${lx + 3},${ly + 10} ${lx},${ly + 5}"/>
-                    <rect x="${lx - labelWidth/2}" y="${ly - 9}" width="${labelWidth}" height="18"/>
-                    <text x="${lx}" y="${ly + 4}" text-anchor="middle">${label}</text>
-                `;
-                treeSvg.appendChild(g);
-            });
-            
             // Update call stack
             if (step.stack.length === 0) {
                 callStack.innerHTML = '<div class="stack-empty">Stack is empty</div>';
@@ -1750,24 +2427,29 @@
                     </div>`;
                 }).join('');
             }
-            
+
             // Update variables
             const globalKeys = Object.keys(step.globals);
             if (globalKeys.length === 0) {
                 varsGrid.innerHTML = '<div class="stack-empty">No variables</div>';
             } else {
+                const formatVal = (v) => {
+                    if (Array.isArray(v)) return JSON.stringify(v);
+                    if (typeof v === 'object' && v !== null) return JSON.stringify(v);
+                    return String(v);
+                };
                 varsGrid.innerHTML = globalKeys.map(key => {
                     const val = step.globals[key];
                     const prevStep = currentStep > 0 ? tracer.steps[currentStep - 1] : null;
                     const prevVal = prevStep ? prevStep.globals[key] : val;
-                    const changed = prevVal !== val;
+                    const changed = JSON.stringify(prevVal) !== JSON.stringify(val);
                     return `<div class="var-box ${changed ? 'highlight updated' : ''}">
                         <div class="label">${key}</div>
-                        <div class="value">${val}</div>
+                        <div class="value">${formatVal(val)}</div>
                     </div>`;
                 }).join('');
             }
-            
+
             // Update trace log
             const logEntries = tracer.steps.slice(0, currentStep + 1).map((s, i) => {
                 const isCurrent = i === currentStep;
@@ -1855,6 +2537,7 @@
             stopPlaying();
             currentStep = 0;
             completedNodes.clear();
+            visitedGraphNodes.clear();
             updateVisualization();
         });
         

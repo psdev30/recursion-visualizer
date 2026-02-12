@@ -44,6 +44,11 @@ try {
     db.exec(`ALTER TABLE problems ADD COLUMN language TEXT DEFAULT 'javascript'`);
 } catch (e) { /* column already exists */ }
 
+// Migration: add mode column if it doesn't exist
+try {
+    db.exec(`ALTER TABLE problems ADD COLUMN mode TEXT DEFAULT 'tree'`);
+} catch (e) { /* column already exists */ }
+
 // API Routes
 
 // GET all problems
@@ -77,16 +82,16 @@ app.get('/api/problems/:id', (req, res) => {
 // POST create new problem
 app.post('/api/problems', (req, res) => {
   try {
-    const { name, tree, globals, code, url, notes, language } = req.body;
+    const { name, tree, globals, code, url, notes, language, mode } = req.body;
 
     if (!name || !tree || !code) {
       return res.status(400).json({ error: 'Name, tree, and code are required' });
     }
 
     const result = db.prepare(`
-      INSERT INTO problems (name, tree, globals, code, url, notes, language)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(name, tree, globals || '{}', code, url || null, notes || null, language || 'javascript');
+      INSERT INTO problems (name, tree, globals, code, url, notes, language, mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, tree, globals || '{}', code, url || null, notes || null, language || 'javascript', mode || 'tree');
     
     const newProblem = db.prepare('SELECT * FROM problems WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(newProblem);
@@ -98,13 +103,13 @@ app.post('/api/problems', (req, res) => {
 // PUT update problem
 app.put('/api/problems/:id', (req, res) => {
   try {
-    const { name, tree, globals, code, url, notes, language } = req.body;
+    const { name, tree, globals, code, url, notes, language, mode } = req.body;
 
     const result = db.prepare(`
       UPDATE problems
-      SET name = ?, tree = ?, globals = ?, code = ?, url = ?, notes = ?, language = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, tree = ?, globals = ?, code = ?, url = ?, notes = ?, language = ?, mode = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(name, tree, globals, code, url, notes, language || 'javascript', req.params.id);
+    `).run(name, tree, globals, code, url, notes, language || 'javascript', mode || 'tree', req.params.id);
     
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Problem not found' });
@@ -142,8 +147,8 @@ app.post('/api/problems/import', (req, res) => {
     }
     
     const insert = db.prepare(`
-      INSERT INTO problems (name, tree, globals, code, url, notes, language)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO problems (name, tree, globals, code, url, notes, language, mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     // Use transaction for bulk insert
@@ -153,7 +158,7 @@ app.post('/api/problems/import', (req, res) => {
       }
 
       for (const p of items) {
-        insert.run(p.name, p.tree, p.globals || '{}', p.code, p.url || null, p.notes || null, p.language || 'javascript');
+        insert.run(p.name, p.tree, p.globals || '{}', p.code, p.url || null, p.notes || null, p.language || 'javascript', p.mode || 'tree');
       }
     });
     
@@ -403,19 +408,306 @@ except Exception as e:
 `;
 }
 
+// Build line map from original code (funcName -> line number)
+function buildLineMap(code) {
+  const map = {};
+  code.split('\n').forEach((line, i) => {
+    const m = line.match(/def\s+(\w+)\s*\(/);
+    if (m) map[m[1]] = i + 1;
+  });
+  return map;
+}
+
+// Build Python script for graph traversal tracing
+function buildGraphPythonScript(userCode, adjListJson, startNode, globalsJson) {
+  const code = preprocessPython(userCode);
+
+  const funcDefs = [];
+  const defRegex = /def\s+(\w+)\s*\(([^)]*)\)/g;
+  let m;
+  while ((m = defRegex.exec(code)) !== null) {
+    funcDefs.push({ name: m[1], paramsStr: m[2].trim(), params: m[2].trim() ? m[2].trim().split(',').map(p => p.trim()) : [] });
+  }
+
+  if (funcDefs.length === 0) {
+    throw new Error('Could not find function definition (expected "def funcName(...)")');
+  }
+
+  const mainFunc = funcDefs[0];
+  const funcNames = funcDefs.map(f => f.name);
+
+  // Rename & rewire
+  let processedCode = code;
+  for (const name of funcNames) {
+    processedCode = processedCode.replace(new RegExp(`def\\s+${name}\\s*\\(`), `def _original_${name}(`);
+  }
+  for (const name of funcNames) {
+    processedCode = processedCode.replace(
+      new RegExp(`(?<!def\\s)(?<!_original_)(?<!_wrapped_)\\b${name}\\s*\\(`, 'g'),
+      `_wrapped_${name}(`
+    );
+  }
+
+  // Wrappers — first param is graph node ID (int)
+  const wrappers = funcDefs.map(f => {
+    const firstParam = f.params[0] || '_node';
+    return `def _wrapped_${f.name}(${f.paramsStr}):
+    _record_call("${f.name}", ${firstParam}, _globs)
+    result = _original_${f.name}(${f.paramsStr})
+    _record_return("${f.name}", ${firstParam}, _globs, result)
+    return result`;
+  }).join('\n\n');
+
+  // Entry args: first param -> start_node, 'graph' -> _graph, 'visited' -> _visited, 'globals' -> _globs
+  const mainCallArgs = mainFunc.params.map((p, i) => {
+    if (i === 0) return `${startNode}`;
+    if (p === 'graph') return '_graph';
+    if (p === 'visited') return '_visited';
+    if (p === 'globals') return '_globs';
+    return p;
+  }).join(', ');
+
+  const adjPy = adjListJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+  const globalsPy = globalsJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+
+  return `
+import sys, json
+
+sys.setrecursionlimit(500)
+
+# ---------- Tracing infrastructure ----------
+_steps = []
+_stack = []
+_MAX_STEPS = 2000
+
+class _StepLimitExceeded(Exception):
+    pass
+
+def _snap_globals(g):
+    return {k: v for k, v in g.items()}
+
+def _serialize(v):
+    if isinstance(v, set):
+        return list(v)
+    return v
+
+def _record_call(func_name, node_id, globs):
+    if len(_steps) >= _MAX_STEPS:
+        raise _StepLimitExceeded("Exceeded maximum number of steps (2000)")
+    _stack.append({"funcName": func_name, "nodeVal": node_id, "nodeId": node_id, "state": "active"})
+    _steps.append({
+        "type": "call",
+        "funcName": func_name,
+        "nodeVal": node_id,
+        "nodeId": node_id,
+        "stack": [dict(f) for f in _stack],
+        "globals": {k: _serialize(v) for k, v in globs.items()},
+        "activeNode": node_id,
+        "message": f"Call {func_name}({node_id})"
+    })
+
+def _record_return(func_name, node_id, globs, result):
+    if len(_steps) >= _MAX_STEPS:
+        raise _StepLimitExceeded("Exceeded maximum number of steps (2000)")
+    if _stack:
+        _stack[-1]["state"] = "returning"
+        _stack[-1]["result"] = _serialize(result)
+    _steps.append({
+        "type": "return",
+        "funcName": func_name,
+        "nodeVal": node_id,
+        "nodeId": node_id,
+        "result": _serialize(result),
+        "stack": [dict(f) for f in _stack],
+        "globals": {k: _serialize(v) for k, v in globs.items()},
+        "returningNode": node_id,
+        "message": f"Return {_serialize(result)} from {func_name}({node_id})"
+    })
+    if _stack:
+        _stack.pop()
+
+# ---------- User code (renamed) ----------
+${processedCode}
+
+# ---------- Wrappers ----------
+${wrappers}
+
+# ---------- Main ----------
+try:
+    _graph = {int(k): v for k, v in (${adjPy}).items()}
+    _visited = set()
+    _globs = ${globalsPy}
+    _wrapped_${mainFunc.name}(${mainCallArgs})
+    print(json.dumps({"steps": _steps}))
+except RecursionError:
+    print(json.dumps({"error": "Maximum recursion depth exceeded (limit: 500)"}))
+except _StepLimitExceeded as e:
+    print(json.dumps({"error": str(e)}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+`;
+}
+
+// Build Python script for backtracking tracing
+function buildBacktrackPythonScript(userCode, candidatesJson, targetJson, globalsJson) {
+  const code = preprocessPython(userCode);
+
+  const funcDefs = [];
+  const defRegex = /def\s+(\w+)\s*\(([^)]*)\)/g;
+  let m;
+  while ((m = defRegex.exec(code)) !== null) {
+    funcDefs.push({ name: m[1], paramsStr: m[2].trim(), params: m[2].trim() ? m[2].trim().split(',').map(p => p.trim()) : [] });
+  }
+
+  if (funcDefs.length === 0) {
+    throw new Error('Could not find function definition (expected "def funcName(...)")');
+  }
+
+  const mainFunc = funcDefs[0];
+  const funcNames = funcDefs.map(f => f.name);
+
+  // Rename & rewire
+  let processedCode = code;
+  for (const name of funcNames) {
+    processedCode = processedCode.replace(new RegExp(`def\\s+${name}\\s*\\(`), `def _original_${name}(`);
+  }
+  for (const name of funcNames) {
+    processedCode = processedCode.replace(
+      new RegExp(`(?<!def\\s)(?<!_original_)(?<!_wrapped_)\\b${name}\\s*\\(`, 'g'),
+      `_wrapped_${name}(`
+    );
+  }
+
+  // For backtracking, we use a call counter as node ID since there are no graph/tree nodes
+  const wrappers = funcDefs.map(f => {
+    return `def _wrapped_${f.name}(${f.paramsStr}):
+    _call_id[0] += 1
+    cid = _call_id[0]
+    # Try to get meaningful label from first param
+    first_arg = ${f.params[0] || 'None'}
+    label = str(first_arg) if not isinstance(first_arg, (list, dict, set)) else str(len(first_arg))
+    _record_call("${f.name}", label, cid, _globs)
+    result = _original_${f.name}(${f.paramsStr})
+    _record_return("${f.name}", label, cid, _globs, result)
+    return result`;
+  }).join('\n\n');
+
+  // Entry args
+  const mainCallArgs = mainFunc.params.map(p => {
+    if (p === 'candidates') return '_candidates';
+    if (p === 'target') return '_target';
+    if (p === 'path') return '_path';
+    if (p === 'globals') return '_globs';
+    return p;
+  }).join(', ');
+
+  const candidatesPy = candidatesJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+  const targetPy = JSON.stringify(targetJson).replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+  const globalsPy = globalsJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+
+  return `
+import sys, json
+
+sys.setrecursionlimit(500)
+
+# ---------- Tracing infrastructure ----------
+_steps = []
+_stack = []
+_call_id = [0]
+_MAX_STEPS = 2000
+
+class _StepLimitExceeded(Exception):
+    pass
+
+def _serialize(v):
+    if isinstance(v, set):
+        return list(v)
+    if isinstance(v, list):
+        return list(v)
+    return v
+
+def _record_call(func_name, label, call_id, globs):
+    if len(_steps) >= _MAX_STEPS:
+        raise _StepLimitExceeded("Exceeded maximum number of steps (2000)")
+    _stack.append({"funcName": func_name, "nodeVal": label, "nodeId": call_id, "state": "active"})
+    _steps.append({
+        "type": "call",
+        "funcName": func_name,
+        "nodeVal": label,
+        "nodeId": call_id,
+        "stack": [dict(f) for f in _stack],
+        "globals": {k: _serialize(v) for k, v in globs.items()},
+        "activeNode": call_id,
+        "message": f"Call {func_name}({label})"
+    })
+
+def _record_return(func_name, label, call_id, globs, result):
+    if len(_steps) >= _MAX_STEPS:
+        raise _StepLimitExceeded("Exceeded maximum number of steps (2000)")
+    if _stack:
+        _stack[-1]["state"] = "returning"
+        _stack[-1]["result"] = _serialize(result)
+    _steps.append({
+        "type": "return",
+        "funcName": func_name,
+        "nodeVal": label,
+        "nodeId": call_id,
+        "result": _serialize(result),
+        "stack": [dict(f) for f in _stack],
+        "globals": {k: _serialize(v) for k, v in globs.items()},
+        "returningNode": call_id,
+        "message": f"Return {_serialize(result)} from {func_name}({label})"
+    })
+    if _stack:
+        _stack.pop()
+
+# ---------- User code (renamed) ----------
+${processedCode}
+
+# ---------- Wrappers ----------
+${wrappers}
+
+# ---------- Main ----------
+try:
+    _candidates = ${candidatesPy}
+    _target = ${targetPy}
+    _path = []
+    _globs = ${globalsPy}
+    _wrapped_${mainFunc.name}(${mainCallArgs})
+    print(json.dumps({"steps": _steps}))
+except RecursionError:
+    print(json.dumps({"error": "Maximum recursion depth exceeded (limit: 500)"}))
+except _StepLimitExceeded as e:
+    print(json.dumps({"error": str(e)}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+`;
+}
+
 // Execute Python code for recursion tracing
 app.post('/api/execute-python', (req, res) => {
-  const { code, tree, globals } = req.body;
+  const { code, tree, graph, startNode, candidates, target, globals, mode } = req.body;
 
   if (!code || !code.trim()) {
     return res.status(400).json({ error: 'No code provided' });
   }
 
   let script;
+  const lm = buildLineMap(code);
+
   try {
-    const treeJson = JSON.stringify(tree || []);
     const globalsJson = JSON.stringify(globals || {});
-    script = buildPythonScript(code, treeJson, globalsJson);
+
+    if (mode === 'graph') {
+      const adjListJson = JSON.stringify(graph || {});
+      script = buildGraphPythonScript(code, adjListJson, startNode || 0, globalsJson);
+    } else if (mode === 'backtrack') {
+      const candidatesJson = JSON.stringify(candidates || []);
+      script = buildBacktrackPythonScript(code, candidatesJson, target, globalsJson);
+    } else {
+      const treeJson = JSON.stringify(tree || []);
+      script = buildPythonScript(code, treeJson, globalsJson);
+    }
   } catch (e) {
     return res.status(400).json({ error: e.message });
   }
@@ -438,6 +730,7 @@ app.post('/api/execute-python', (req, res) => {
 
     try {
       const result = JSON.parse(stdout);
+      result.lineMap = lm;
       res.json(result);
     } catch (e) {
       res.json({ error: 'Failed to parse output from Python' });
