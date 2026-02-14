@@ -921,6 +921,7 @@
                     <button class="mode-btn active" data-mode="tree">Tree</button>
                     <button class="mode-btn" data-mode="graph">Graph</button>
                     <button class="mode-btn" data-mode="backtrack">Backtrack</button>
+                    <button class="mode-btn" data-mode="visualize">Visualize</button>
                 </div>
             </div>
 
@@ -946,6 +947,13 @@
                 <div class="help-text" style="margin-bottom: 6px;">Candidates array (JSON)</div>
                 <input class="tree-input" id="backtrackTarget" placeholder="Target value, e.g. 7" value="7">
                 <div class="help-text">Target or constraint value</div>
+            </div>
+
+            <div class="editor-section" draggable="true" id="visualizeInputSection" style="display:none;">
+                <div class="section-title"><span class="drag-handle">⠿</span>Tree Array (LeetCode format)</div>
+                <textarea class="tree-input" id="visualizeInput" rows="3" placeholder="[1, 2, 3, null, 5, null, 4]">[1, 2, 3, null, 5, null, 4]</textarea>
+                <div class="help-text">Paste a LeetCode-style level-order array. Use null for empty nodes.</div>
+                <button class="run-btn" id="vizShowBtn" style="margin-top: 8px; border-radius: 6px;">👁 Show Tree</button>
             </div>
             
             <div class="editor-section" draggable="true">
@@ -1441,6 +1449,18 @@
             document.getElementById('treeInputSection').style.display = mode === 'tree' ? '' : 'none';
             document.getElementById('graphInputSection').style.display = mode === 'graph' ? '' : 'none';
             document.getElementById('backtrackInputSection').style.display = mode === 'backtrack' ? '' : 'none';
+            document.getElementById('visualizeInputSection').style.display = mode === 'visualize' ? '' : 'none';
+
+            // Hide code/globals/language sections in visualize mode
+            const codeSections = document.querySelectorAll('.editor-section[draggable="true"]');
+            codeSections.forEach(s => {
+                const title = s.querySelector('.section-title');
+                if (!title) return;
+                const text = title.textContent.trim();
+                if (text.includes('Recursive Function') || text.includes('Language') || text.includes('Global Variables')) {
+                    s.style.display = mode === 'visualize' ? 'none' : '';
+                }
+            });
 
             // Update help text based on mode
             const helpEl = document.getElementById('langHelpText');
@@ -1460,6 +1480,8 @@
                     : `Use <code>candidates</code>, <code>target</code>, <code>path</code> (array)<br>
                        Use <code>globals.varName</code> for tracked variables<br>
                        The function receives (candidates, target, path, globals)`;
+            } else if (mode === 'visualize') {
+                // No help text needed
             } else {
                 // tree mode - delegate to setLanguage to get correct lang-specific text
                 setLanguage(currentLanguage);
@@ -1875,7 +1897,93 @@
                 errorDisplay.innerHTML = `<div class="error-msg">${e.message}</div>`;
             }
         }
-        
+
+        // Visualize mode — just show the tree, no execution
+        document.getElementById('vizShowBtn').addEventListener('click', () => {
+            const input = document.getElementById('visualizeInput').value.trim();
+            if (!input) return;
+
+            try {
+                const treeArr = JSON.parse(input);
+                tree = buildTree(treeArr);
+                treeLayout = calculatePositions(tree);
+                graphLayout = null;
+                tracer = null;
+                callTree = null;
+                callTreeLayout = null;
+                currentStep = 0;
+                completedNodes.clear();
+
+                // Disable step controls (no steps to navigate)
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+                playBtn.disabled = true;
+                resetBtn.disabled = true;
+                stepNum.textContent = '0';
+                totalSteps.textContent = '0';
+
+                document.getElementById('primaryVizTitle').textContent = 'Tree';
+                renderTreeVisualize();
+
+                // Clear other panels
+                callStack.innerHTML = '<div class="stack-empty">Visualize mode — no execution</div>';
+                varsGrid.innerHTML = '<div class="stack-empty">Visualize mode — no execution</div>';
+                traceLog.innerHTML = '<div class="stack-empty">Visualize mode — no execution</div>';
+                document.getElementById('callTreeSvg').innerHTML = '';
+
+                errorDisplay.innerHTML = '';
+            } catch (e) {
+                errorDisplay.innerHTML = `<div class="error-msg">${e.message}</div>`;
+            }
+        });
+
+        // Render tree for visualize mode — shows all nodes with values, no highlighting
+        function renderTreeVisualize() {
+            if (!treeLayout) return;
+
+            const { nodes, edges, nullPositions, width, height } = treeLayout;
+
+            const padTop = 20;
+            treeSvg.setAttribute('viewBox', `0 -${padTop} ${width} ${height + padTop}`);
+            treeSvg.style.width = `${Math.min(width, 500)}px`;
+            treeSvg.style.height = `${Math.min(height + padTop, 400)}px`;
+
+            let svg = '';
+            const colors = ['#7fc8f8', '#82aaff', '#c792ea', '#f78c6c', '#c3e88d', '#ffcb6b', '#ff7eb6'];
+
+            // Edges
+            edges.forEach(e => {
+                svg += `<line class="tree-edge" x1="${e.from.x}" y1="${e.from.y}" x2="${e.to.x}" y2="${e.to.y}"/>`;
+            });
+
+            // Null edges and nodes
+            nullPositions.forEach(np => {
+                svg += `<line class="null-edge visible" x1="${np.parentX}" y1="${np.parentY}" x2="${np.x}" y2="${np.y}"/>`;
+            });
+            nullPositions.forEach(np => {
+                svg += `<g class="null-node visible">
+                    <circle cx="${np.x}" cy="${np.y}" r="14"/>
+                    <text x="${np.x}" y="${np.y + 3}" text-anchor="middle">null</text>
+                </g>`;
+            });
+
+            // Nodes
+            nodes.forEach((n, i) => {
+                const color = colors[i % colors.length];
+                svg += `<g class="tree-node">
+                    <circle cx="${n.x}" cy="${n.y}" r="20" fill="${color}"/>
+                    <text x="${n.x}" y="${n.y + 5}" text-anchor="middle" fill="#1a1a2e">${n.val}</text>
+                </g>`;
+            });
+
+            // Node index labels (small, below each node)
+            nodes.forEach(n => {
+                svg += `<text x="${n.x}" y="${n.y + 35}" text-anchor="middle" fill="#636d83" font-size="9" font-family="Monaco, monospace">i=${n.id}</text>`;
+            });
+
+            treeSvg.innerHTML = svg;
+        }
+
         function renderTree() {
             if (!treeLayout) return;
             
