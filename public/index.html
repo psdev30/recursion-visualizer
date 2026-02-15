@@ -2342,9 +2342,8 @@
             const nodes = [];
             const edges = [];
             const ySpacing = 55;
-            const xGap = 20; // horizontal gap between sibling nodes
+            const xGap = 20;
 
-            // Pre-compute label width for a node
             function labelWidth(n) {
                 const v1 = n.nodeVal === null || n.nodeVal === undefined ? 'null' : n.nodeVal;
                 const args = n.nodeVal2 !== undefined ? `${v1}, ${n.nodeVal2 === null ? 'null' : n.nodeVal2}` : `${v1}`;
@@ -2352,7 +2351,6 @@
                 return Math.max(label.length * 6.5 + 16, 50);
             }
 
-            // First pass: collect all leaves in order and compute their widths
             const leaves = [];
             function collectLeaves(n) {
                 if (n.children.length === 0) {
@@ -2363,7 +2361,6 @@
             }
             collectLeaves(node);
 
-            // Assign leaf x positions based on cumulative widths
             let xPos = 20;
             for (const leaf of leaves) {
                 const w = labelWidth(leaf);
@@ -2375,7 +2372,6 @@
             function layout(n, d) {
                 n.cy = d * ySpacing + 20;
                 if (n.children.length === 0) {
-                    // Already positioned above
                     nodes.push(n);
                     return;
                 }
@@ -2383,7 +2379,6 @@
                     layout(child, d + 1);
                     edges.push({ from: n, to: child });
                 }
-                // Position parent at horizontal center of children
                 const firstChild = n.children[0];
                 const lastChild = n.children[n.children.length - 1];
                 const firstCenter = firstChild.cx + (firstChild._boxW || labelWidth(firstChild)) / 2;
@@ -2409,11 +2404,16 @@
             }
 
             const { nodes, edges, width, height } = callTreeLayout;
+            // Fit to container width, scale proportionally, scroll vertically
+            const containerWidth = svg.parentElement.clientWidth || 300;
+            const scale = Math.min(1, containerWidth / width);
+            const scaledHeight = height / scale;
             svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-            svg.style.minWidth = `${Math.max(width, 200)}px`;
-            svg.style.minHeight = `${Math.max(height, 100)}px`;
-            svg.style.width = `${Math.max(width, 200)}px`;
-            svg.style.height = `${Math.max(height, 100)}px`;
+            svg.setAttribute('preserveAspectRatio', 'xMidYMin meet');
+            svg.style.width = '100%';
+            svg.style.minWidth = '';
+            svg.style.minHeight = `${Math.max(scaledHeight * scale, 100)}px`;
+            svg.style.height = `${Math.max(scaledHeight * scale, 100)}px`;
 
             let svgContent = '';
 
@@ -2858,7 +2858,6 @@
                     if (n.returnStep <= currentStep && n.result !== null && n.result !== undefined) {
                         const rv = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         rv.classList.add('ct-return-val');
-                        const nodeLabel = el.querySelector('text');
                         const boxW = el.querySelector('rect') ? parseFloat(el.querySelector('rect').getAttribute('width')) : 50;
                         rv.setAttribute('x', n.cx + boxW / 2);
                         rv.setAttribute('y', n.cy + 22);
