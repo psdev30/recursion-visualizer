@@ -243,7 +243,7 @@ function preprocessPython(code) {
 }
 
 // Build a self-contained Python script for tracing recursion
-function buildPythonScript(userCode, treeJson, globalsJson) {
+function buildPythonScript(userCode, treeJson, globalsJson, tree2Json) {
   // Preprocess LeetCode-style code (class/self/annotations)
   const code = preprocessPython(userCode);
 
@@ -265,6 +265,10 @@ function buildPythonScript(userCode, treeJson, globalsJson) {
   const mainFunc = funcDefs[0];
   const funcNames = funcDefs.map(f => f.name);
 
+  // Detect two-tree mode: main function has 2+ non-globals params and tree2 data provided
+  const mainTreeParams = mainFunc.params.filter(p => p !== 'globals');
+  const twoTreeMode = tree2Json && mainTreeParams.length >= 2;
+
   // Rename all functions: def foo( -> def _original_foo(
   let processedCode = code;
   for (const name of funcNames) {
@@ -284,6 +288,18 @@ function buildPythonScript(userCode, treeJson, globalsJson) {
 
   // Generate a wrapper for each function
   const wrappers = funcDefs.map(f => {
+    if (twoTreeMode) {
+      const treeParams = f.params.filter(p => p !== 'globals');
+      if (treeParams.length >= 2) {
+        const p1 = treeParams[0];
+        const p2 = treeParams[1];
+        return `def _wrapped_${f.name}(${f.paramsStr}):
+    _record_call_2t("${f.name}", ${p1}, ${p2}, _globs)
+    result = _original_${f.name}(${f.paramsStr})
+    _record_return_2t("${f.name}", ${p1}, ${p2}, _globs, result)
+    return result`;
+      }
+    }
     const firstParam = f.params[0] || '_node';
     return `def _wrapped_${f.name}(${f.paramsStr}):
     _record_call("${f.name}", ${firstParam}, _globs)
@@ -292,9 +308,14 @@ function buildPythonScript(userCode, treeJson, globalsJson) {
     return result`;
   }).join('\n\n');
 
-  // Determine entry call arguments: first param -> _tree, 'globals' param -> _globs
+  // Determine entry call arguments
   const mainCallArgs = mainFunc.params.map((p, i) => {
-    if (i === 0) return '_tree';
+    if (twoTreeMode) {
+      if (i === 0) return '_tree1';
+      if (i === 1 && mainTreeParams.length >= 2 && p !== 'globals') return '_tree2';
+    } else {
+      if (i === 0) return '_tree';
+    }
     if (p === 'globals') return '_globs';
     return p;
   }).join(', ') || '_tree';
@@ -302,6 +323,87 @@ function buildPythonScript(userCode, treeJson, globalsJson) {
   // Convert JSON literals to Python equivalents
   const treePy = treeJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
   const globalsPy = globalsJson.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+  const tree2Py = tree2Json ? tree2Json.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False') : null;
+
+  // Two-tree tracing functions
+  const twoTreeTracing = twoTreeMode ? `
+def _record_call_2t(func_name, node1, node2, globs):
+    if len(_steps) >= _MAX_STEPS:
+        raise _StepLimitExceeded("Exceeded maximum number of steps (2000)")
+    n1_val = node1.val if node1 else None
+    n1_id = node1.id if node1 else None
+    n2_val = node2.val if node2 else None
+    n2_id = node2.id if node2 else None
+    _stack.append({"funcName": func_name, "nodeVal": n1_val, "nodeId": n1_id, "nodeVal2": n2_val, "nodeId2": n2_id, "state": "active"})
+    _steps.append({
+        "type": "call",
+        "funcName": func_name,
+        "nodeVal": n1_val,
+        "nodeId": n1_id,
+        "nodeVal2": n2_val,
+        "nodeId2": n2_id,
+        "stack": [dict(f) for f in _stack],
+        "globals": _snap_globals(globs),
+        "activeNode": n1_id,
+        "activeNode2": n2_id,
+        "message": f"Call {func_name}({n1_val if n1_val is not None else 'null'}, {n2_val if n2_val is not None else 'null'})"
+    })
+
+def _record_return_2t(func_name, node1, node2, globs, result):
+    if len(_steps) >= _MAX_STEPS:
+        raise _StepLimitExceeded("Exceeded maximum number of steps (2000)")
+    n1_val = node1.val if node1 else None
+    n1_id = node1.id if node1 else None
+    n2_val = node2.val if node2 else None
+    n2_id = node2.id if node2 else None
+    if _stack:
+        _stack[-1]["state"] = "returning"
+        _stack[-1]["result"] = result
+    _steps.append({
+        "type": "return",
+        "funcName": func_name,
+        "nodeVal": n1_val,
+        "nodeId": n1_id,
+        "nodeVal2": n2_val,
+        "nodeId2": n2_id,
+        "result": result,
+        "stack": [dict(f) for f in _stack],
+        "globals": _snap_globals(globs),
+        "returningNode": n1_id,
+        "returningNode2": n2_id,
+        "message": f"Return {result} from {func_name}({n1_val if n1_val is not None else 'null'}, {n2_val if n2_val is not None else 'null'})"
+    })
+    if _stack:
+        _stack.pop()
+` : '';
+
+  // Main block differs for two-tree mode
+  const mainBlock = twoTreeMode ? `
+try:
+    _tree1 = build_tree(${treePy})
+    _tree2 = build_tree(${tree2Py}, id_offset=1000)
+    _globs = ${globalsPy}
+    _wrapped_${mainFunc.name}(${mainCallArgs})
+    print(json.dumps({"steps": _steps, "twoTree": True}))
+except RecursionError:
+    print(json.dumps({"error": "Maximum recursion depth exceeded (limit: 500)"}))
+except _StepLimitExceeded as e:
+    print(json.dumps({"error": str(e)}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+` : `
+try:
+    _tree = build_tree(${treePy})
+    _globs = ${globalsPy}
+    _wrapped_${mainFunc.name}(${mainCallArgs})
+    print(json.dumps({"steps": _steps}))
+except RecursionError:
+    print(json.dumps({"error": "Maximum recursion depth exceeded (limit: 500)"}))
+except _StepLimitExceeded as e:
+    print(json.dumps({"error": str(e)}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+`;
 
   return `
 import sys, json, collections
@@ -316,13 +418,13 @@ class TreeNode:
         self.left = None
         self.right = None
 
-def build_tree(arr):
+def build_tree(arr, id_offset=0):
     if not arr or arr[0] is None:
         return None
-    root = TreeNode(arr[0], 0)
+    root = TreeNode(arr[0], id_offset)
     queue = collections.deque([root])
     i = 1
-    node_id = 1
+    node_id = id_offset + 1
     while queue and i < len(arr):
         node = queue.popleft()
         if i < len(arr) and arr[i] is not None:
@@ -386,7 +488,7 @@ def _record_return(func_name, node, globs, result):
     })
     if _stack:
         _stack.pop()
-
+${twoTreeTracing}
 # ---------- User code (renamed) ----------
 ${processedCode}
 
@@ -394,17 +496,7 @@ ${processedCode}
 ${wrappers}
 
 # ---------- Main ----------
-try:
-    _tree = build_tree(${treePy})
-    _globs = ${globalsPy}
-    _wrapped_${mainFunc.name}(${mainCallArgs})
-    print(json.dumps({"steps": _steps}))
-except RecursionError:
-    print(json.dumps({"error": "Maximum recursion depth exceeded (limit: 500)"}))
-except _StepLimitExceeded as e:
-    print(json.dumps({"error": str(e)}))
-except Exception as e:
-    print(json.dumps({"error": str(e)}))
+${mainBlock}
 `;
 }
 
@@ -686,7 +778,7 @@ except Exception as e:
 
 // Execute Python code for recursion tracing
 app.post('/api/execute-python', (req, res) => {
-  const { code, tree, graph, startNode, candidates, target, globals, mode } = req.body;
+  const { code, tree, tree2, graph, startNode, candidates, target, globals, mode } = req.body;
 
   if (!code || !code.trim()) {
     return res.status(400).json({ error: 'No code provided' });
@@ -706,7 +798,8 @@ app.post('/api/execute-python', (req, res) => {
       script = buildBacktrackPythonScript(code, candidatesJson, target, globalsJson);
     } else {
       const treeJson = JSON.stringify(tree || []);
-      script = buildPythonScript(code, treeJson, globalsJson);
+      const tree2Json = tree2 ? JSON.stringify(tree2) : null;
+      script = buildPythonScript(code, treeJson, globalsJson, tree2Json);
     }
   } catch (e) {
     return res.status(400).json({ error: e.message });
