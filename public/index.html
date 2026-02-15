@@ -2404,16 +2404,12 @@
             }
 
             const { nodes, edges, width, height } = callTreeLayout;
-            // Fit to container width, scale proportionally, scroll vertically
-            const containerWidth = svg.parentElement.clientWidth || 300;
-            const scale = Math.min(1, containerWidth / width);
-            const scaledHeight = height / scale;
             svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-            svg.setAttribute('preserveAspectRatio', 'xMidYMin meet');
-            svg.style.width = '100%';
-            svg.style.minWidth = '';
-            svg.style.minHeight = `${Math.max(scaledHeight * scale, 100)}px`;
-            svg.style.height = `${Math.max(scaledHeight * scale, 100)}px`;
+            svg.removeAttribute('preserveAspectRatio');
+            svg.style.width = `${Math.max(width, 200)}px`;
+            svg.style.height = `${Math.max(height, 100)}px`;
+            svg.style.minWidth = `${Math.max(width, 200)}px`;
+            svg.style.minHeight = `${Math.max(height, 100)}px`;
 
             let svgContent = '';
 
