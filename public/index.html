@@ -1076,6 +1076,13 @@
             <div class="editor-section" draggable="true" id="visualizeInputSection" style="display:none;">
                 <div class="section-title"><span class="drag-handle">⠿</span>Tree Array (LeetCode format)</div>
                 <textarea class="tree-input" id="visualizeInput" rows="3" placeholder="[1, 2, 3, null, 5, null, 4]">[1, 2, 3, null, 5, null, 4]</textarea>
+                <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--text-secondary);cursor:pointer;">
+                    <input type="checkbox" id="vizTwoTreeToggle"> Compare two trees
+                </label>
+                <div id="vizInput2Section" style="display:none;">
+                    <div class="section-title" style="margin-top:8px;">Tree 2</div>
+                    <textarea class="tree-input" id="visualizeInput2" rows="3" placeholder="[1, 2, 4]"></textarea>
+                </div>
                 <div class="help-text">Paste a LeetCode-style level-order array. Use null for empty nodes.</div>
                 <button class="run-btn" id="vizShowBtn" style="margin-top: 8px; border-radius: 6px;">👁 Show Tree</button>
             </div>
@@ -1519,7 +1526,7 @@
 
         let currentSelectedProblem = null;
         let cachedProblems = {};
-        let currentMode = 'tree';
+        let currentMode = localStorage.getItem('rv-default-mode') || 'tree';
 
         // Mode toggle
         const modeBtns = document.querySelectorAll('.mode-btn');
@@ -1564,14 +1571,16 @@
                     Use <code>globals["varName"]</code> for tracked variables<br>
                     The function receives (node, globals) as parameters<br>
                     Use <code>None</code> instead of <code>null</code>`;
-                return;
             }
+            localStorage.setItem('rv-default-mode', mode);
         }
 
         modeBtns.forEach(btn => {
             btn.addEventListener('click', () => setMode(btn.dataset.mode));
         });
 
+        // Apply saved mode on load
+        setMode(currentMode);
 
         // Two-tree auto-detection
         let isTwoTreeMode = false;
@@ -2071,7 +2080,12 @@
             }
         }
 
-        // Visualize mode — just show the tree, no execution
+        // Visualize two-tree toggle
+        document.getElementById('vizTwoTreeToggle').addEventListener('change', function() {
+            document.getElementById('vizInput2Section').style.display = this.checked ? '' : 'none';
+        });
+
+        // Visualize mode — just show the tree(s), no execution
         document.getElementById('vizShowBtn').addEventListener('click', () => {
             const input = document.getElementById('visualizeInput').value.trim();
             if (!input) return;
@@ -2080,6 +2094,19 @@
                 const treeArr = JSON.parse(input);
                 tree = buildTree(treeArr);
                 treeLayout = calculatePositions(tree);
+
+                // Check for second tree
+                const twoTreeChecked = document.getElementById('vizTwoTreeToggle').checked;
+                const input2 = document.getElementById('visualizeInput2').value.trim();
+                if (twoTreeChecked && input2) {
+                    const tree2Arr = JSON.parse(input2);
+                    tree2 = buildTree(tree2Arr, 1000);
+                    tree2Layout = calculatePositions(tree2);
+                } else {
+                    tree2 = null;
+                    tree2Layout = null;
+                }
+
                 graphLayout = null;
                 tracer = null;
                 callTree = null;
@@ -2095,7 +2122,7 @@
                 stepNum.textContent = '0';
                 totalSteps.textContent = '0';
 
-                document.getElementById('primaryVizTitle').textContent = 'Tree';
+                document.getElementById('primaryVizTitle').textContent = tree2Layout ? 'Trees' : 'Tree';
                 renderTreeVisualize();
 
                 // Clear other panels
@@ -2111,51 +2138,66 @@
             }
         });
 
-        // Render tree for visualize mode — shows all nodes with values, no highlighting
+        // Render tree(s) for visualize mode — shows all nodes with values, no highlighting
         function renderTreeVisualize() {
             if (!treeLayout) return;
 
-            const { nodes, edges, nullPositions, width, height } = treeLayout;
-
-            const padTop = 20;
-            treeSvg.setAttribute('viewBox', `0 -${padTop} ${width} ${height + padTop}`);
-            treeSvg.style.width = `${Math.min(width, 500)}px`;
-            treeSvg.style.height = `${Math.min(height + padTop, 400)}px`;
-
-            let svg = '';
             const colors = ['#7fc8f8', '#82aaff', '#c792ea', '#f78c6c', '#c3e88d', '#ffcb6b', '#ff7eb6'];
 
-            // Edges
-            edges.forEach(e => {
-                svg += `<line class="tree-edge" x1="${e.from.x}" y1="${e.from.y}" x2="${e.to.x}" y2="${e.to.y}"/>`;
-            });
+            function vizSingleTree(layout, offsetX, offsetY) {
+                let s = '';
+                layout.edges.forEach(e => {
+                    s += `<line class="tree-edge" x1="${e.from.x + offsetX}" y1="${e.from.y + offsetY}" x2="${e.to.x + offsetX}" y2="${e.to.y + offsetY}"/>`;
+                });
+                layout.nullPositions.forEach(np => {
+                    s += `<line class="null-edge visible" x1="${np.parentX + offsetX}" y1="${np.parentY + offsetY}" x2="${np.x + offsetX}" y2="${np.y + offsetY}"/>`;
+                });
+                layout.nullPositions.forEach(np => {
+                    s += `<g class="null-node visible">
+                        <circle cx="${np.x + offsetX}" cy="${np.y + offsetY}" r="14"/>
+                        <text x="${np.x + offsetX}" y="${np.y + offsetY + 3}" text-anchor="middle">null</text>
+                    </g>`;
+                });
+                layout.nodes.forEach((n, i) => {
+                    const color = colors[i % colors.length];
+                    s += `<g class="tree-node">
+                        <circle cx="${n.x + offsetX}" cy="${n.y + offsetY}" r="20" fill="${color}"/>
+                        <text x="${n.x + offsetX}" y="${n.y + offsetY + 5}" text-anchor="middle" fill="#1a1a2e">${n.val}</text>
+                    </g>`;
+                });
+                layout.nodes.forEach(n => {
+                    s += `<text x="${n.x + offsetX}" y="${n.y + offsetY + 35}" text-anchor="middle" fill="#636d83" font-size="9" font-family="Monaco, monospace">i=${n.id}</text>`;
+                });
+                return s;
+            }
 
-            // Null edges and nodes
-            nullPositions.forEach(np => {
-                svg += `<line class="null-edge visible" x1="${np.parentX}" y1="${np.parentY}" x2="${np.x}" y2="${np.y}"/>`;
-            });
-            nullPositions.forEach(np => {
-                svg += `<g class="null-node visible">
-                    <circle cx="${np.x}" cy="${np.y}" r="14"/>
-                    <text x="${np.x}" y="${np.y + 3}" text-anchor="middle">null</text>
-                </g>`;
-            });
+            if (tree2Layout) {
+                const gap = 40;
+                const padTop = 50;
+                const totalWidth = treeLayout.width + gap + tree2Layout.width;
+                const maxHeight = Math.max(treeLayout.height, tree2Layout.height);
 
-            // Nodes
-            nodes.forEach((n, i) => {
-                const color = colors[i % colors.length];
-                svg += `<g class="tree-node">
-                    <circle cx="${n.x}" cy="${n.y}" r="20" fill="${color}"/>
-                    <text x="${n.x}" y="${n.y + 5}" text-anchor="middle" fill="#1a1a2e">${n.val}</text>
-                </g>`;
-            });
+                treeSvg.setAttribute('viewBox', `0 -${padTop} ${totalWidth} ${maxHeight + padTop}`);
+                treeSvg.style.width = `${Math.min(totalWidth, 600)}px`;
+                treeSvg.style.height = `${Math.min(maxHeight + padTop, 400)}px`;
 
-            // Node index labels (small, below each node)
-            nodes.forEach(n => {
-                svg += `<text x="${n.x}" y="${n.y + 35}" text-anchor="middle" fill="#636d83" font-size="9" font-family="Monaco, monospace">i=${n.id}</text>`;
-            });
+                let svg = '';
+                const t1CenterX = treeLayout.width / 2;
+                svg += `<text x="${t1CenterX}" y="-${padTop - 15}" text-anchor="middle" fill="#7fc8f8" font-size="13" font-weight="bold" font-family="Monaco, monospace">Tree 1</text>`;
+                const t2CenterX = treeLayout.width + gap + tree2Layout.width / 2;
+                svg += `<text x="${t2CenterX}" y="-${padTop - 15}" text-anchor="middle" fill="#c792ea" font-size="13" font-weight="bold" font-family="Monaco, monospace">Tree 2</text>`;
 
-            treeSvg.innerHTML = svg;
+                svg += vizSingleTree(treeLayout, 0, 0);
+                svg += vizSingleTree(tree2Layout, treeLayout.width + gap, 0);
+                treeSvg.innerHTML = svg;
+            } else {
+                const { width, height } = treeLayout;
+                const padTop = 20;
+                treeSvg.setAttribute('viewBox', `0 -${padTop} ${width} ${height + padTop}`);
+                treeSvg.style.width = `${Math.min(width, 500)}px`;
+                treeSvg.style.height = `${Math.min(height + padTop, 400)}px`;
+                treeSvg.innerHTML = vizSingleTree(treeLayout, 0, 0);
+            }
         }
 
         function renderSingleTree(layout, offsetX, offsetY) {
