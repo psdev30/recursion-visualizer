@@ -861,7 +861,7 @@
         }
         .ct-node text {
             font-family: 'Monaco', monospace;
-            font-size: 10px;
+            font-size: 13px;
             fill: var(--text-primary);
         }
         .ct-node.ct-active rect {
@@ -890,7 +890,7 @@
         }
         .ct-return-val {
             font-family: 'Monaco', monospace;
-            font-size: 9px;
+            font-size: 11px;
             fill: var(--accent-green);
         }
 
@@ -2363,14 +2363,14 @@
 
             const nodes = [];
             const edges = [];
-            const ySpacing = 55;
+            const ySpacing = 65;
             const xGap = 20;
 
             function labelWidth(n) {
                 const v1 = n.nodeVal === null || n.nodeVal === undefined ? 'null' : n.nodeVal;
                 const args = n.nodeVal2 !== undefined ? `${v1}, ${n.nodeVal2 === null ? 'null' : n.nodeVal2}` : `${v1}`;
                 const label = `${n.name}(${args})`;
-                return Math.max(label.length * 6.5 + 16, 50);
+                return Math.max(label.length * 8 + 20, 60);
             }
 
             const leaves = [];
@@ -2444,7 +2444,7 @@
                 const v1 = n.nodeVal === null || n.nodeVal === undefined ? 'null' : n.nodeVal;
                 const args = n.nodeVal2 !== undefined ? `${v1}, ${n.nodeVal2 === null ? 'null' : n.nodeVal2}` : `${v1}`;
                 const label = `${n.name}(${args})`;
-                const boxW = n._boxW || Math.max(label.length * 6.5 + 16, 50);
+                const boxW = n._boxW || Math.max(label.length * 8 + 20, 60);
                 nodeLabels.set(n.id, { label, boxW });
             });
 
@@ -2454,8 +2454,8 @@
                 const fromCenterX = e.from.cx + fromInfo.boxW / 2;
                 const toInfo = nodeLabels.get(e.to.id);
                 const toCenterX = e.to.cx + toInfo.boxW / 2;
-                const midY = (e.from.cy + 10 + e.to.cy - 10) / 2;
-                svgContent += `<path class="ct-edge" d="M${fromCenterX},${e.from.cy + 10} C${fromCenterX},${midY} ${toCenterX},${midY} ${toCenterX},${e.to.cy - 10}"/>`;
+                const midY = (e.from.cy + 13 + e.to.cy - 13) / 2;
+                svgContent += `<path class="ct-edge" d="M${fromCenterX},${e.from.cy + 13} C${fromCenterX},${midY} ${toCenterX},${midY} ${toCenterX},${e.to.cy - 13}"/>`;
             });
 
             // Nodes
@@ -2463,8 +2463,8 @@
                 const { label, boxW } = nodeLabels.get(n.id);
                 const isNull = n.nodeVal === null || n.nodeVal === undefined;
                 svgContent += `<g class="ct-node${isNull ? ' ct-null' : ''}" id="ct-${n.id}" data-step="${n.step}" data-return="${n.returnStep}">
-                    <rect x="${n.cx}" y="${n.cy - 10}" width="${boxW}" height="20" fill="var(--bg-button)" stroke="var(--border-hover)" stroke-width="1"/>
-                    <text x="${n.cx + boxW/2}" y="${n.cy + 4}" text-anchor="middle">${label}</text>
+                    <rect x="${n.cx}" y="${n.cy - 13}" width="${boxW}" height="26" fill="var(--bg-button)" stroke="var(--border-hover)" stroke-width="1"/>
+                    <text x="${n.cx + boxW/2}" y="${n.cy + 5}" text-anchor="middle">${label}</text>
                 </g>`;
             });
 
@@ -2881,7 +2881,7 @@
                         rv.classList.add('ct-return-val');
                         const boxW = el.querySelector('rect') ? parseFloat(el.querySelector('rect').getAttribute('width')) : 50;
                         rv.setAttribute('x', n.cx + boxW / 2);
-                        rv.setAttribute('y', n.cy + 22);
+                        rv.setAttribute('y', n.cy + 26);
                         rv.setAttribute('text-anchor', 'middle');
                         rv.textContent = `→ ${n.result}`;
                         el.appendChild(rv);
