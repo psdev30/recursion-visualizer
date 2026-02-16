@@ -850,8 +850,7 @@
         /* Call tree viz */
         .call-tree-viz {
             flex: 1;
-            overflow-x: hidden;
-            overflow-y: auto;
+            overflow: auto;
             min-height: 0;
         }
         .ct-node rect {
@@ -2427,14 +2426,11 @@
 
             const { nodes, edges, width, height } = callTreeLayout;
             svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-            svg.setAttribute('preserveAspectRatio', 'xMidYMin meet');
-            svg.style.width = '100%';
-            svg.style.minWidth = '';
-            // Scale height proportionally to fit width
-            const containerWidth = svg.parentElement.clientWidth || 300;
-            const scaledHeight = (height / width) * containerWidth;
-            svg.style.height = `${Math.max(scaledHeight, 100)}px`;
-            svg.style.minHeight = `${Math.max(scaledHeight, 100)}px`;
+            svg.removeAttribute('preserveAspectRatio');
+            svg.style.width = `${Math.max(width, 200)}px`;
+            svg.style.height = `${Math.max(height, 100)}px`;
+            svg.style.minWidth = `${Math.max(width, 200)}px`;
+            svg.style.minHeight = `${Math.max(height, 100)}px`;
 
             let svgContent = '';
 
