@@ -2990,65 +2990,79 @@
             }
         });
 
-        // Step Over: if current step is a "call", skip to its matching "return" + 1
+        // Helper: mark all returns between two step indices as completed
+        function markReturnsBetween(from, to) {
+            for (let j = from; j <= to && j < tracer.steps.length; j++) {
+                const s = tracer.steps[j];
+                if (s.type === 'return' && s.nodeId !== null && s.nodeId !== undefined) {
+                    completedNodes.set(s.nodeId, s.result);
+                }
+                if (s.type === 'return' && s.nodeId2 !== null && s.nodeId2 !== undefined) {
+                    completedNodes.set(s.nodeId2, s.result);
+                }
+            }
+        }
+
+        // Helper: find matching return for a call at index i
+        function findMatchingReturn(startIdx) {
+            let depth = 1;
+            let i = startIdx + 1;
+            while (i < tracer.steps.length && depth > 0) {
+                if (tracer.steps[i].type === 'call') depth++;
+                else if (tracer.steps[i].type === 'return') depth--;
+                if (depth === 0) return i;
+                i++;
+            }
+            return tracer.steps.length - 1;
+        }
+
+        // Step Over: skip the next child call's subtree, stepping through siblings
+        // From a call: look at next step; if it's a deeper call, skip that subtree
+        //              and land on the step after it. Otherwise advance one.
+        // From a return: advance one step.
         stepOverBtn.addEventListener('click', () => {
             if (!tracer || currentStep >= tracer.steps.length - 1) return;
-            const step = tracer.steps[currentStep];
-            if (step.type === 'call') {
-                // Find matching return by tracking depth
-                let depth = 1;
-                let i = currentStep + 1;
-                while (i < tracer.steps.length && depth > 0) {
-                    if (tracer.steps[i].type === 'call') depth++;
-                    else if (tracer.steps[i].type === 'return') depth--;
-                    if (depth === 0) break;
-                    i++;
+            const nextIdx = currentStep + 1;
+            const nextStep = tracer.steps[nextIdx];
+            const curDepth = tracer.steps[currentStep].stack ? tracer.steps[currentStep].stack.length : 0;
+
+            if (nextStep.type === 'call') {
+                const nextDepth = nextStep.stack ? nextStep.stack.length : 0;
+                if (nextDepth > curDepth) {
+                    // Next step goes deeper - skip that child's subtree
+                    const matchingReturn = findMatchingReturn(nextIdx);
+                    const target = Math.min(matchingReturn + 1, tracer.steps.length - 1);
+                    markReturnsBetween(nextIdx, target);
+                    currentStep = target;
+                } else {
+                    currentStep = nextIdx;
                 }
-                // Advance to the step after the matching return
-                const target = Math.min(i + 1, tracer.steps.length - 1);
-                // Mark all returns we're skipping
-                for (let j = currentStep + 1; j <= target && j < tracer.steps.length; j++) {
-                    const s = tracer.steps[j];
-                    if (s.type === 'return' && s.nodeId !== null && s.nodeId !== undefined) {
-                        completedNodes.set(s.nodeId, s.result);
-                    }
-                    if (s.type === 'return' && s.nodeId2 !== null && s.nodeId2 !== undefined) {
-                        completedNodes.set(s.nodeId2, s.result);
-                    }
-                }
-                currentStep = target;
             } else {
-                // On a return step, just advance one
-                currentStep++;
+                // Next is a return, just advance
+                currentStep = nextIdx;
             }
             updateVisualization();
         });
 
-        // Step Out: jump to the return of the current stack frame
+        // Step Out: jump to the return of the current frame
         stepOutBtn.addEventListener('click', () => {
             if (!tracer || currentStep >= tracer.steps.length - 1) return;
-            const currentDepth = tracer.steps[currentStep].stack ? tracer.steps[currentStep].stack.length : 0;
+            const curDepth = tracer.steps[currentStep].stack ? tracer.steps[currentStep].stack.length : 0;
+            // Find the next return that brings us back to or above our current depth
             let i = currentStep + 1;
             while (i < tracer.steps.length) {
                 const s = tracer.steps[i];
-                if (s.type === 'return' && s.stack && s.stack.length <= currentDepth) {
-                    // Mark all returns we're skipping
-                    for (let j = currentStep + 1; j <= i; j++) {
-                        const sk = tracer.steps[j];
-                        if (sk.type === 'return' && sk.nodeId !== null && sk.nodeId !== undefined) {
-                            completedNodes.set(sk.nodeId, sk.result);
-                        }
-                        if (sk.type === 'return' && sk.nodeId2 !== null && sk.nodeId2 !== undefined) {
-                            completedNodes.set(sk.nodeId2, sk.result);
-                        }
-                    }
+                const sDepth = s.stack ? s.stack.length : 0;
+                if (s.type === 'return' && sDepth <= curDepth) {
+                    markReturnsBetween(currentStep + 1, i);
                     currentStep = i;
                     updateVisualization();
                     return;
                 }
                 i++;
             }
-            // If no matching return found, go to last step
+            // If no matching return, go to last step
+            markReturnsBetween(currentStep + 1, tracer.steps.length - 1);
             currentStep = tracer.steps.length - 1;
             updateVisualization();
         });
