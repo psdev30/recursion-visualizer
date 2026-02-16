@@ -950,6 +950,21 @@
             border-color: var(--accent-title);
             font-weight: 600;
         }
+        .mode-default-btn {
+            background: none;
+            border: 1px dashed var(--border-hover);
+            color: var(--text-secondary);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 11px;
+            cursor: pointer;
+            margin-left: auto;
+        }
+        .mode-default-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
 
         /* Error display */
         .error-msg {
@@ -1043,6 +1058,7 @@
                     <button class="mode-btn" data-mode="graph">Graph</button>
                     <button class="mode-btn" data-mode="backtrack">Backtracking</button>
                     <button class="mode-btn" data-mode="visualize">Visualize</button>
+                    <button class="mode-default-btn" id="setDefaultModeBtn" title="Set current mode as default">⭐ Set Default</button>
                 </div>
             </div>
 
@@ -1573,11 +1589,16 @@
                     The function receives (node, globals) as parameters<br>
                     Use <code>None</code> instead of <code>null</code>`;
             }
-            localStorage.setItem('rv-default-mode', mode);
         }
 
         modeBtns.forEach(btn => {
             btn.addEventListener('click', () => setMode(btn.dataset.mode));
+        });
+
+        // Set default mode button
+        document.getElementById('setDefaultModeBtn').addEventListener('click', () => {
+            localStorage.setItem('rv-default-mode', currentMode);
+            showToast(`Default mode set to "${currentMode}"`);
         });
 
         // Apply saved mode on load
