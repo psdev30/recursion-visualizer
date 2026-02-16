@@ -1145,7 +1145,9 @@
         <div class="viz-panel">
             <div class="controls">
                 <button class="btn" id="prevBtn" disabled>← Prev</button>
-                <button class="btn primary" id="nextBtn" disabled>Next →</button>
+                <button class="btn primary" id="nextBtn" disabled title="Step Into (→)">Step Into</button>
+                <button class="btn" id="stepOverBtn" disabled title="Step Over (⇧→)">Step Over</button>
+                <button class="btn" id="stepOutBtn" disabled title="Step Out (⇧←)">Step Out</button>
                 <button class="btn" id="playBtn" disabled>▶ Play</button>
                 <button class="btn" id="resetBtn" disabled>Reset</button>
                 <div class="speed-control">
@@ -1484,6 +1486,8 @@
         const runBtn = document.getElementById('runBtn');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
+        const stepOverBtn = document.getElementById('stepOverBtn');
+        const stepOutBtn = document.getElementById('stepOutBtn');
         const playBtn = document.getElementById('playBtn');
         const resetBtn = document.getElementById('resetBtn');
         const speedSlider = document.getElementById('speedSlider');
@@ -1525,6 +1529,8 @@
             completedNodes.clear();
             prevBtn.disabled = true;
             nextBtn.disabled = true;
+            stepOverBtn.disabled = true;
+            stepOutBtn.disabled = true;
             playBtn.disabled = true;
             resetBtn.disabled = true;
             stepNum.textContent = '0';
@@ -2034,6 +2040,8 @@
                 // Enable controls
                 prevBtn.disabled = false;
                 nextBtn.disabled = false;
+                stepOverBtn.disabled = false;
+                stepOutBtn.disabled = false;
                 playBtn.disabled = false;
                 resetBtn.disabled = false;
 
@@ -2138,6 +2146,8 @@
                 // Disable step controls (no steps to navigate)
                 prevBtn.disabled = true;
                 nextBtn.disabled = true;
+                stepOverBtn.disabled = true;
+                stepOutBtn.disabled = true;
                 playBtn.disabled = true;
                 resetBtn.disabled = true;
                 stepNum.textContent = '0';
@@ -2656,8 +2666,12 @@
             totalSteps.textContent = tracer.steps.length;
 
             // Update buttons
+            const atEnd = currentStep === tracer.steps.length - 1;
             prevBtn.disabled = currentStep === 0;
-            nextBtn.disabled = currentStep === tracer.steps.length - 1;
+            nextBtn.disabled = atEnd;
+            stepOverBtn.disabled = atEnd;
+            const stackDepth = step.stack ? step.stack.length : 0;
+            stepOutBtn.disabled = atEnd || stackDepth <= 1;
 
             // Update primary viz title
             const titleEl = document.getElementById('primaryVizTitle');
@@ -2975,7 +2989,70 @@
                 updateVisualization();
             }
         });
-        
+
+        // Step Over: if current step is a "call", skip to its matching "return" + 1
+        stepOverBtn.addEventListener('click', () => {
+            if (!tracer || currentStep >= tracer.steps.length - 1) return;
+            const step = tracer.steps[currentStep];
+            if (step.type === 'call') {
+                // Find matching return by tracking depth
+                let depth = 1;
+                let i = currentStep + 1;
+                while (i < tracer.steps.length && depth > 0) {
+                    if (tracer.steps[i].type === 'call') depth++;
+                    else if (tracer.steps[i].type === 'return') depth--;
+                    if (depth === 0) break;
+                    i++;
+                }
+                // Advance to the step after the matching return
+                const target = Math.min(i + 1, tracer.steps.length - 1);
+                // Mark all returns we're skipping
+                for (let j = currentStep + 1; j <= target && j < tracer.steps.length; j++) {
+                    const s = tracer.steps[j];
+                    if (s.type === 'return' && s.nodeId !== null && s.nodeId !== undefined) {
+                        completedNodes.set(s.nodeId, s.result);
+                    }
+                    if (s.type === 'return' && s.nodeId2 !== null && s.nodeId2 !== undefined) {
+                        completedNodes.set(s.nodeId2, s.result);
+                    }
+                }
+                currentStep = target;
+            } else {
+                // On a return step, just advance one
+                currentStep++;
+            }
+            updateVisualization();
+        });
+
+        // Step Out: jump to the return of the current stack frame
+        stepOutBtn.addEventListener('click', () => {
+            if (!tracer || currentStep >= tracer.steps.length - 1) return;
+            const currentDepth = tracer.steps[currentStep].stack ? tracer.steps[currentStep].stack.length : 0;
+            let i = currentStep + 1;
+            while (i < tracer.steps.length) {
+                const s = tracer.steps[i];
+                if (s.type === 'return' && s.stack && s.stack.length <= currentDepth) {
+                    // Mark all returns we're skipping
+                    for (let j = currentStep + 1; j <= i; j++) {
+                        const sk = tracer.steps[j];
+                        if (sk.type === 'return' && sk.nodeId !== null && sk.nodeId !== undefined) {
+                            completedNodes.set(sk.nodeId, sk.result);
+                        }
+                        if (sk.type === 'return' && sk.nodeId2 !== null && sk.nodeId2 !== undefined) {
+                            completedNodes.set(sk.nodeId2, sk.result);
+                        }
+                    }
+                    currentStep = i;
+                    updateVisualization();
+                    return;
+                }
+                i++;
+            }
+            // If no matching return found, go to last step
+            currentStep = tracer.steps.length - 1;
+            updateVisualization();
+        });
+
         playBtn.addEventListener('click', () => {
             if (isPlaying) {
                 stopPlaying();
@@ -3035,7 +3112,13 @@
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'TEXTAREA') return;
             
-            if (e.key === 'ArrowRight' || e.key === ' ') {
+            if (e.key === 'ArrowRight' && e.shiftKey) {
+                e.preventDefault();
+                stepOverBtn.click();
+            } else if (e.key === 'ArrowLeft' && e.shiftKey) {
+                e.preventDefault();
+                stepOutBtn.click();
+            } else if (e.key === 'ArrowRight' || e.key === ' ') {
                 e.preventDefault();
                 if (tracer && currentStep < tracer.steps.length - 1) {
                     currentStep++;
