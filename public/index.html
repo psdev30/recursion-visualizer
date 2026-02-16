@@ -819,8 +819,22 @@
         }
         .code-line {
             display: flex;
+            align-items: center;
             padding: 1px 10px;
             transition: background 0.2s;
+        }
+        .code-line-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 4px;
+            flex-shrink: 0;
+            opacity: 0;
+        }
+        .code-line.active-call .code-line-dot,
+        .code-line.active-return .code-line-dot {
+            background: #e74c3c;
+            opacity: 1;
         }
         .code-line.active-call {
             background: rgba(127, 200, 248, 0.15);
@@ -2623,6 +2637,7 @@
             const lines = code.split('\n');
             container.innerHTML = lines.map((line, i) => {
                 return `<div class="code-line" id="code-line-${i + 1}">
+                    <span class="code-line-dot"></span>
                     <span class="code-line-num">${i + 1}</span>
                     <span class="code-line-text">${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
                 </div>`;
