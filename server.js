@@ -342,6 +342,7 @@ def _record_call_2t(func_name, node1, node2, globs):
         "nodeId": n1_id,
         "nodeVal2": n2_val,
         "nodeId2": n2_id,
+        "line": _get_caller_line(),
         "stack": [dict(f) for f in _stack],
         "globals": _snap_globals(globs),
         "activeNode": n1_id,
@@ -463,6 +464,17 @@ def _line_tracer(frame, event, arg):
             _last_user_line = frame.f_lineno - _USER_CODE_START + 1
     return _line_tracer
 
+def _get_caller_line():
+    import sys as _sys2
+    try:
+        for depth in range(1, 8):
+            f = _sys2._getframe(depth)
+            if f.f_code.co_name in _user_func_names:
+                return f.f_lineno - _USER_CODE_START + 1
+    except ValueError:
+        pass
+    return 0
+
 def _record_call(func_name, node, globs):
     if len(_steps) >= _MAX_STEPS:
         raise _StepLimitExceeded("Exceeded maximum number of steps (2000)")
@@ -474,6 +486,7 @@ def _record_call(func_name, node, globs):
         "funcName": func_name,
         "nodeVal": node_val,
         "nodeId": node_id,
+        "line": _get_caller_line(),
         "stack": [dict(f) for f in _stack],
         "globals": _snap_globals(globs),
         "activeNode": node_id,
