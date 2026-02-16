@@ -2650,8 +2650,9 @@
             document.querySelectorAll('.code-line').forEach(el => {
                 el.classList.remove('active-call', 'active-return');
             });
-            // Highlight the line for the current function
-            const lineNum = lineMap[step.funcName];
+            // For return steps, use the exact line from the tracer if available
+            // For call steps, use the function def line
+            const lineNum = (step.type === 'return' && step.line > 0) ? step.line : lineMap[step.funcName];
             if (lineNum) {
                 const lineEl = document.getElementById(`code-line-${lineNum}`);
                 if (lineEl) {

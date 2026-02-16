@@ -367,6 +367,7 @@ def _record_return_2t(func_name, node1, node2, globs, result):
         "nodeVal2": n2_val,
         "nodeId2": n2_id,
         "result": result,
+        "line": _last_user_line,
         "stack": [dict(f) for f in _stack],
         "globals": _snap_globals(globs),
         "returningNode": n1_id,
@@ -405,7 +406,10 @@ except Exception as e:
     print(json.dumps({"error": str(e)}))
 `;
 
-  return `
+  // Build prefix (everything before user code) so we can count its lines
+  const userFuncNamesSet = funcNames.map(n => `"_original_${n}"`).join(', ');
+
+  const prefix = `
 import sys, json, collections
 
 sys.setrecursionlimit(500)
@@ -443,12 +447,21 @@ def build_tree(arr, id_offset=0):
 _steps = []
 _stack = []
 _MAX_STEPS = 2000
+_last_user_line = 0
+_user_func_names = {${userFuncNamesSet}}
 
 class _StepLimitExceeded(Exception):
     pass
 
 def _snap_globals(g):
     return {k: v for k, v in g.items()}
+
+def _line_tracer(frame, event, arg):
+    global _last_user_line
+    if frame.f_code.co_name in _user_func_names:
+        if event in ('line', 'return'):
+            _last_user_line = frame.f_lineno - _USER_CODE_START + 1
+    return _line_tracer
 
 def _record_call(func_name, node, globs):
     if len(_steps) >= _MAX_STEPS:
@@ -481,6 +494,7 @@ def _record_return(func_name, node, globs, result):
         "nodeVal": node_val,
         "nodeId": node_id,
         "result": result,
+        "line": _last_user_line,
         "stack": [dict(f) for f in _stack],
         "globals": _snap_globals(globs),
         "returningNode": node_id,
@@ -488,16 +502,29 @@ def _record_return(func_name, node, globs, result):
     })
     if _stack:
         _stack.pop()
-${twoTreeTracing}
-# ---------- User code (renamed) ----------
-${processedCode}
+${twoTreeTracing}`;
+
+  // Count lines in prefix to compute user code offset
+  const prefixLineCount = prefix.split('\n').length;
+
+  const suffix = `
 
 # ---------- Wrappers ----------
 ${wrappers}
 
 # ---------- Main ----------
+sys.settrace(_line_tracer)
 ${mainBlock}
 `;
+
+  // prefix ends at prefixLineCount, then \n, _USER_CODE_START line, comment line, then user code
+  const userCodeStart = prefixLineCount + 3;
+
+  return `${prefix}
+_USER_CODE_START = ${userCodeStart}
+# ---------- User code (renamed) ----------
+${processedCode}
+${suffix}`;
 }
 
 // Build line map from original code (funcName -> line number)
