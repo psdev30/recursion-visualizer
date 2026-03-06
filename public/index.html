@@ -924,6 +924,41 @@
             opacity: 0.5;
         }
 
+        /* Coding-style toggle (LeetCode vs Standard) */
+        .coding-style-toggle {
+            display: flex;
+            gap: 0;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--border-hover);
+        }
+        .style-btn {
+            flex: 1;
+            background: var(--bg-button);
+            border: none;
+            color: var(--text-secondary);
+            padding: 6px 0;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .style-btn:hover {
+            background: var(--border-hover);
+        }
+        .style-btn.active[data-style="leetcode"] {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+        .style-btn.active[data-style="standard"] {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+        }
+
         /* Mode toggle */
         .mode-toggle {
             display: flex;
@@ -1052,6 +1087,10 @@
         <div class="editor-panel">
             <div class="editor-section" draggable="true">
                 <div class="section-title"><span class="drag-handle">⠿</span>Mode</div>
+                <div class="coding-style-toggle">
+                    <button class="style-btn active" data-style="leetcode">LeetCode</button>
+                    <button class="style-btn" data-style="standard">Standard</button>
+                </div>
                 <div class="mode-toggle">
                     <button class="mode-btn active" data-mode="tree">Tree</button>
                     <button class="mode-btn" data-mode="graph">Graph</button>
@@ -1065,6 +1104,7 @@
                 <div class="section-title"><span class="drag-handle">⠿</span><span id="treeInputTitle">Tree Structure</span></div>
                 <textarea class="tree-input" id="treeInput" rows="3" placeholder="e.g. [1, 2, 3, 4, 5]">[1, 2, 3, 4, 5, null, null]</textarea>
                 <div class="help-text">Array format (level-order). Use null for empty nodes.</div>
+                <button id="addTreeBtn" style="background:none; border:none; color:#5c6bc0; cursor:pointer; font-size:11px; padding:4px 0; margin-top:2px;">+ Add Tree</button>
                 <div id="treeInput2Section" style="display:none; margin-top: 8px;">
                     <div style="color: #636d83; font-size: 11px; margin-bottom: 4px; font-weight: 600;">Tree 2 (q)</div>
                     <textarea class="tree-input" id="treeInput2" rows="3" placeholder="e.g. [1, 2, 3]">[1, 2, 3]</textarea>
@@ -1506,9 +1546,7 @@
             treeInput.value = '';
             document.getElementById('treeInput2').value = '';
             globalsInput.value = '';
-            document.getElementById('treeInput2Section').style.display = 'none';
-            document.getElementById('treeInputTitle').textContent = 'Tree Structure';
-            isTwoTreeMode = false;
+            setTwoTreeMode(false);
             errorDisplay.innerHTML = '';
             treeSvg.innerHTML = '';
             callStack.innerHTML = '<div class="stack-empty">Run to see call stack</div>';
@@ -1544,8 +1582,67 @@
         let cachedProblems = {};
         let currentMode = localStorage.getItem('rv-default-mode') || 'tree';
 
+        // LeetCode vs Standard coding style
+        let isLeetCodeMode = localStorage.getItem('rv-lc-mode') !== 'false';
+
+        const styleBtns = document.querySelectorAll('.style-btn');
+        function setCodingStyle(leetcode) {
+            isLeetCodeMode = leetcode;
+            localStorage.setItem('rv-lc-mode', leetcode ? 'true' : 'false');
+            styleBtns.forEach(btn => {
+                btn.classList.toggle('active', (btn.dataset.style === 'leetcode') === leetcode);
+            });
+            // Re-apply help text for current sub-mode
+            updateHelpText(currentMode);
+        }
+        styleBtns.forEach(btn => {
+            btn.addEventListener('click', () => setCodingStyle(btn.dataset.style === 'leetcode'));
+        });
+        // Apply saved style on load
+        setCodingStyle(isLeetCodeMode);
+
         // Mode toggle
         const modeBtns = document.querySelectorAll('.mode-btn');
+
+        function updateHelpText(mode) {
+            const helpEl = document.getElementById('langHelpText');
+            if (mode === 'graph') {
+                if (isLeetCodeMode) {
+                    helpEl.innerHTML = `Use <code>node</code> (current node ID), <code>graph</code> (adjacency dict), <code>visited</code> (set)<br>
+                       Use <code>globals["varName"]</code> for tracked variables<br>
+                       The function receives (node, graph, visited, globals)`;
+                } else {
+                    helpEl.innerHTML = `Write any recursive graph function.<br>
+                       The function receives (node, graph, visited, globals) — no preprocessing applied.<br>
+                       Use <code>globals["varName"]</code> for tracked variables`;
+                }
+            } else if (mode === 'backtrack') {
+                if (isLeetCodeMode) {
+                    helpEl.innerHTML = `Use <code>candidates</code>, <code>target</code>, <code>path</code> (list)<br>
+                       Use <code>globals["varName"]</code> for tracked variables<br>
+                       The function receives (candidates, target, path, globals)`;
+                } else {
+                    helpEl.innerHTML = `Write any recursive backtracking function.<br>
+                       The function receives (candidates, target, path, globals) — no preprocessing applied.<br>
+                       Use <code>globals["varName"]</code> for tracked variables`;
+                }
+            } else if (mode === 'visualize') {
+                // No help text needed
+            } else {
+                // tree mode
+                if (isLeetCodeMode) {
+                    helpEl.innerHTML = `Use <code>node.val</code>, <code>node.left</code>, <code>node.right</code><br>
+                        Use <code>globals["varName"]</code> for tracked variables<br>
+                        The function receives (node, globals) as parameters<br>
+                        Use <code>None</code> instead of <code>null</code>`;
+                } else {
+                    helpEl.innerHTML = `Write any standard recursive tree function — no <code>class Solution</code> stripping or annotation removal.<br>
+                        Root is a <code>TreeNode(val, left, right)</code> built from the array above.<br>
+                        Define your own node class in the code if needed; it will be preserved as-is.<br>
+                        Use <code>globals["varName"]</code> for tracked variables`;
+                }
+            }
+        }
 
         function setMode(mode) {
             currentMode = mode;
@@ -1569,25 +1666,7 @@
                 }
             });
 
-            // Update help text based on mode
-            const helpEl = document.getElementById('langHelpText');
-            if (mode === 'graph') {
-                helpEl.innerHTML = `Use <code>node</code> (current node ID), <code>graph</code> (adjacency dict), <code>visited</code> (set)<br>
-                       Use <code>globals["varName"]</code> for tracked variables<br>
-                       The function receives (node, graph, visited, globals)`;
-            } else if (mode === 'backtrack') {
-                helpEl.innerHTML = `Use <code>candidates</code>, <code>target</code>, <code>path</code> (list)<br>
-                       Use <code>globals["varName"]</code> for tracked variables<br>
-                       The function receives (candidates, target, path, globals)`;
-            } else if (mode === 'visualize') {
-                // No help text needed
-            } else {
-                // tree mode
-                helpEl.innerHTML = `Use <code>node.val</code>, <code>node.left</code>, <code>node.right</code><br>
-                    Use <code>globals["varName"]</code> for tracked variables<br>
-                    The function receives (node, globals) as parameters<br>
-                    Use <code>None</code> instead of <code>null</code>`;
-            }
+            updateHelpText(mode);
         }
 
         modeBtns.forEach(btn => {
@@ -1603,33 +1682,17 @@
         // Apply saved mode on load
         setMode(currentMode);
 
-        // Two-tree auto-detection
+        // Two-tree mode (toggled manually via Add Tree button)
         let isTwoTreeMode = false;
 
-        function detectTwoTreeMode() {
-            const code = codeInput.value;
-            // Match Python: def funcName(p, q) or def funcName(p, q, globals)
-            // Match JS: function funcName(p, q) or function funcName(p, q, globals)
-            const pyMatch = code.match(/def\s+\w+\s*\(([^)]*)\)/);
-            const jsMatch = code.match(/function\s+\w+\s*\(([^)]*)\)/);
-            const paramStr = (pyMatch && pyMatch[1]) || (jsMatch && jsMatch[1]) || '';
-            const params = paramStr.split(',')
-                .map(p => p.trim())
-                .filter(p => p && p !== 'self')
-                .map(p => p.replace(/\s*:.*$/, '')); // strip type annotations
-
-            // Two-tree if first two params are NOT 'node'/'globals' pattern
-            // i.e., two params that both look like tree params (not 'globals')
-            const treeParams = params.filter(p => p !== 'globals');
-            const twoTree = treeParams.length >= 2;
-
-            isTwoTreeMode = twoTree;
-            document.getElementById('treeInput2Section').style.display = twoTree ? '' : 'none';
-            document.getElementById('treeInputTitle').textContent = twoTree ? 'Tree 1 (p)' : 'Tree Structure';
+        function setTwoTreeMode(enabled) {
+            isTwoTreeMode = enabled;
+            document.getElementById('treeInput2Section').style.display = enabled ? '' : 'none';
+            document.getElementById('treeInputTitle').textContent = enabled ? 'Tree 1 (p)' : 'Tree Structure';
+            document.getElementById('addTreeBtn').textContent = enabled ? '- Remove Tree' : '+ Add Tree';
         }
 
-        codeInput.addEventListener('input', detectTwoTreeMode);
-        codeInput.addEventListener('paste', () => setTimeout(detectTwoTreeMode, 0));
+        document.getElementById('addTreeBtn').addEventListener('click', () => setTwoTreeMode(!isTwoTreeMode));
 
         // Load custom problem
         presetSelect.addEventListener('change', async () => {
@@ -1651,6 +1714,7 @@
                 if (problem) {
                     const problemMode = problem.mode || 'tree';
                     setMode(problemMode);
+                    setCodingStyle(problem.leetcode !== false);
 
                     if (problemMode === 'graph') {
                         document.getElementById('graphInput').value = problem.tree;
@@ -1678,7 +1742,14 @@
                     }
                     globalsInput.value = problem.globals;
                     codeInput.value = problem.code;
-                    detectTwoTreeMode();
+
+                    // Enable two-tree mode if the problem has tree2 data
+                    try {
+                        const parsed = JSON.parse(problem.tree);
+                        setTwoTreeMode(!!(parsed.tree1 && parsed.tree2));
+                    } catch (_) {
+                        setTwoTreeMode(false);
+                    }
 
                     if (problem.url || problem.notes) {
                         problemInfoSection.style.display = 'block';
@@ -1745,7 +1816,8 @@
                 url: document.getElementById('problemUrl').value.trim(),
                 notes: document.getElementById('problemNotes').value.trim(),
                 language: 'python',
-                mode: currentMode
+                mode: currentMode,
+                leetcode: isLeetCodeMode
             };
             
             const saved = await saveProblem(problem);
@@ -1949,8 +2021,6 @@
                 if (!code.trim()) throw new Error("Please enter a function");
 
                 if (currentMode === 'tree') {
-                    // Detect if code needs two trees
-                    detectTwoTreeMode();
 
                     // Parse tree(s)
                     const treeArr = JSON.parse(treeInput.value);
@@ -1976,7 +2046,7 @@
                     runBtn.textContent = '⏳ Running...';
                     runBtn.disabled = true;
                     try {
-                        const payload = { code, tree: treeArr, globals, mode: 'tree' };
+                        const payload = { code, tree: treeArr, globals, mode: 'tree', leetcode: isLeetCodeMode };
                         if (tree2Arr) payload.tree2 = tree2Arr;
                         const result = await executePython(payload);
                         tracer = { steps: result.steps, lineMap: result.lineMap, twoTree: result.twoTree };
@@ -1996,7 +2066,7 @@
                     runBtn.textContent = '⏳ Running...';
                     runBtn.disabled = true;
                     try {
-                        const result = await executePython({ code, graph: adjList, startNode, globals, mode: 'graph' });
+                        const result = await executePython({ code, graph: adjList, startNode, globals, mode: 'graph', leetcode: isLeetCodeMode });
                         tracer = { steps: result.steps, lineMap: result.lineMap };
                     } finally {
                         runBtn.textContent = '▶ Run Visualization';
@@ -2017,7 +2087,7 @@
                     runBtn.textContent = '⏳ Running...';
                     runBtn.disabled = true;
                     try {
-                        const result = await executePython({ code, candidates, target: parsedTarget, globals, mode: 'backtrack' });
+                        const result = await executePython({ code, candidates, target: parsedTarget, globals, mode: 'backtrack', leetcode: isLeetCodeMode });
                         tracer = { steps: result.steps, lineMap: result.lineMap };
                     } finally {
                         runBtn.textContent = '▶ Run Visualization';
