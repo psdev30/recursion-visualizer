@@ -1046,6 +1046,8 @@
             <button class="header-btn" id="importBtn" title="Import problems from file">📥 Import</button>
             <input type="file" id="importFile" accept=".json" style="display: none;">
             <div class="header-divider"></div>
+            <button class="header-btn" id="shareBtn" title="Copy shareable link">🔗 Share</button>
+            <div class="header-divider"></div>
             <button class="header-btn" id="themeToggle" title="Toggle light/dark mode">☀️ Light</button>
         </div>
     </div>
@@ -3304,9 +3306,76 @@
             });
         })();
 
+        // ── URL sharing ────────────────────────────────────────────────────────
+
+        function encodeState(state) {
+            try { return btoa(encodeURIComponent(JSON.stringify(state))); }
+            catch(_) { return null; }
+        }
+
+        function decodeState(hash) {
+            try { return JSON.parse(decodeURIComponent(atob(hash))); }
+            catch(_) { return null; }
+        }
+
+        function buildShareState() {
+            const state = {
+                mode: currentMode,
+                leetcode: isLeetCodeMode,
+                code: cmEditor.getValue(),
+                globals: globalsInput.value,
+            };
+            if (currentMode === 'tree') {
+                state.tree = treeInput.value;
+                if (isTwoTreeMode) state.tree2 = document.getElementById('treeInput2').value;
+            } else if (currentMode === 'graph') {
+                state.graph = document.getElementById('graphInput').value;
+                state.startNode = document.getElementById('graphStartNode').value;
+            } else if (currentMode === 'backtrack') {
+                state.candidates = document.getElementById('backtrackCandidates').value;
+                state.target = document.getElementById('backtrackTarget').value;
+            }
+            return state;
+        }
+
+        function restoreState(state) {
+            setMode(state.mode || 'tree');
+            setCodingStyle(state.leetcode !== false);
+            cmEditor.setValue(state.code || '');
+            globalsInput.value = state.globals || '';
+            if (state.mode === 'tree') {
+                treeInput.value = state.tree || '';
+                if (state.tree2) {
+                    setTwoTreeMode(true);
+                    document.getElementById('treeInput2').value = state.tree2;
+                }
+            } else if (state.mode === 'graph') {
+                document.getElementById('graphInput').value = state.graph || '';
+                document.getElementById('graphStartNode').value = state.startNode || '0';
+            } else if (state.mode === 'backtrack') {
+                document.getElementById('backtrackCandidates').value = state.candidates || '';
+                document.getElementById('backtrackTarget').value = state.target || '';
+            }
+        }
+
+        document.getElementById('shareBtn').addEventListener('click', () => {
+            const encoded = encodeState(buildShareState());
+            if (!encoded) { showToast('Failed to generate link', true); return; }
+            const url = `${location.origin}${location.pathname}#${encoded}`;
+            history.replaceState(null, '', `#${encoded}`);
+            navigator.clipboard.writeText(url)
+                .then(() => showToast('Link copied to clipboard!'))
+                .catch(() => showToast('Link updated in address bar'));
+        });
+
         // Initialize
         async function init() {
             cachedProblems = await populateCustomProblems();
+            const hash = location.hash.slice(1);
+            if (hash) {
+                const state = decodeState(hash);
+                if (state) { restoreState(state); return; }
+            }
             presetSelect.value = 'diameter';
             presetSelect.dispatchEvent(new Event('change'));
         }
