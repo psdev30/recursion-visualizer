@@ -3146,23 +3146,22 @@
         
         // Keyboard navigation
         document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'TEXTAREA') return;
-            
-            if (e.key === 'ArrowRight' || e.key === ' ') {
+            // Ignore when typing in any input, textarea, or CodeMirror editor
+            const tag = e.target.tagName;
+            if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return;
+            if (e.target.closest('.CodeMirror')) return;
+
+            if (e.key === 'ArrowRight') {
                 e.preventDefault();
-                if (tracer && currentStep < tracer.steps.length - 1) {
-                    currentStep++;
-                    updateVisualization();
-                }
+                if (!nextBtn.disabled) nextBtn.click();
             } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                if (tracer && currentStep > 0) {
-                    if (tracer.steps[currentStep].type === 'return') {
-                        completedNodes.delete(tracer.steps[currentStep].nodeId);
-                    }
-                    currentStep--;
-                    updateVisualization();
-                }
+                if (!prevBtn.disabled) prevBtn.click();
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                if (!playBtn.disabled) playBtn.click();
+            } else if (e.key === 'r' || e.key === 'R') {
+                if (!resetBtn.disabled) resetBtn.click();
             }
         });
         
