@@ -1000,6 +1000,24 @@
             color: var(--accent);
         }
 
+        /* CodeMirror overrides */
+        .CodeMirror {
+            height: auto;
+            min-height: 150px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            border-radius: 6px 6px 0 0;
+            flex: 1;
+        }
+        .CodeMirror-scroll {
+            min-height: 150px;
+            max-height: 320px;
+        }
+        .code-editor .CodeMirror {
+            border-radius: 6px 6px 0 0;
+        }
+
         /* Error display */
         .error-msg {
             background: rgba(255, 100, 100, 0.1);
@@ -1271,6 +1289,14 @@
         </div>
     </div>
 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/monokai.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/eclipse.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/matchbrackets.min.js"></script>
+
     <script>
         // API base URL - change this if deploying elsewhere
         const API_URL = '/api';
@@ -1521,6 +1547,22 @@
         const treeInput = document.getElementById('treeInput');
         const globalsInput = document.getElementById('globalsInput');
         const codeInput = document.getElementById('codeInput');
+        const cmEditor = CodeMirror.fromTextArea(codeInput, {
+            mode: 'python',
+            theme: localStorage.getItem('rv-theme') === 'light' ? 'eclipse' : 'monokai',
+            lineNumbers: true,
+            indentUnit: 4,
+            tabSize: 4,
+            indentWithTabs: false,
+            lineWrapping: true,
+            autoCloseBrackets: true,
+            matchBrackets: true,
+            extraKeys: {
+                'Ctrl-Enter': () => runVisualization(),
+                'Cmd-Enter':  () => runVisualization(),
+            }
+        });
+
         const runBtn = document.getElementById('runBtn');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
@@ -1542,7 +1584,7 @@
         
         // Clear button
         document.getElementById('clearBtn').addEventListener('click', () => {
-            codeInput.value = '';
+            cmEditor.setValue('');
             treeInput.value = '';
             document.getElementById('treeInput2').value = '';
             globalsInput.value = '';
@@ -1741,7 +1783,7 @@
                         }
                     }
                     globalsInput.value = problem.globals;
-                    codeInput.value = problem.code;
+                    cmEditor.setValue(problem.code || '');
 
                     // Enable two-tree mode if the problem has tree2 data
                     try {
@@ -1792,7 +1834,7 @@
                 return;
             }
             
-            const code = codeInput.value.trim();
+            const code = cmEditor.getValue().trim();
             if (!code) {
                 showToast('Please enter some code first', true);
                 return;
@@ -1896,6 +1938,7 @@
             const isLight = document.body.classList.contains('light');
             themeToggle.textContent = isLight ? '🌙 Dark' : '☀️ Light';
             localStorage.setItem('rv-theme', isLight ? 'light' : 'dark');
+            cmEditor.setOption('theme', isLight ? 'eclipse' : 'monokai');
         });
 
         // Export problems to JSON file
@@ -2017,7 +2060,7 @@
                 }
 
                 // Get code
-                const code = codeInput.value;
+                const code = cmEditor.getValue();
                 if (!code.trim()) throw new Error("Please enter a function");
 
                 if (currentMode === 'tree') {
@@ -2677,7 +2720,7 @@
 
         function renderCodeHighlight() {
             const container = document.getElementById('codeHighlightView');
-            const code = codeInput.value;
+            const code = cmEditor.getValue();
             if (!code.trim()) {
                 container.innerHTML = '<div class="stack-empty">No code to display</div>';
                 return;
