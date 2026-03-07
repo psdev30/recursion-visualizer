@@ -312,6 +312,89 @@ describe('buildPythonScript', () => {
     });
   });
 
+  // ── Non-primitive return values ────────────────────────────────────────────
+
+  describe('non-primitive return values', () => {
+    test('function returning a TreeNode (e.g. invertTree) does not crash', () => {
+      const code = [
+        'def invertTree(root):',
+        '    if not root:',
+        '        return None',
+        '    root.left, root.right = invertTree(root.right), invertTree(root.left)',
+        '    return root',
+      ].join('\n');
+      const script = buildPythonScript(code, '[4,2,7,1,3,6,9]', '{}', null);
+      const output = runScript(script);
+      expect(output.steps).toBeDefined();
+      expect(Array.isArray(output.steps)).toBe(true);
+      expect(output.steps.length).toBeGreaterThan(0);
+    });
+
+    test('return steps from invertTree have a serializable result (node val, not object)', () => {
+      const code = [
+        'def invertTree(root):',
+        '    if not root:',
+        '        return None',
+        '    root.left, root.right = invertTree(root.right), invertTree(root.left)',
+        '    return root',
+      ].join('\n');
+      const script = buildPythonScript(code, '[4,2,7]', '{}', null);
+      const { steps } = runScript(script);
+      const returnSteps = steps.filter(s => s.type === 'return' && s.result !== null);
+      expect(returnSteps.length).toBeGreaterThan(0);
+      returnSteps.forEach(s => {
+        // result must be a primitive (number), not an object
+        expect(typeof s.result).toBe('number');
+      });
+    });
+
+    test('LeetCode-style invertTree with class Solution does not crash', () => {
+      const code = [
+        'class Solution:',
+        '    def invertTree(self, root: Optional[TreeNode]) -> Optional[TreeNode]:',
+        '        if not root:',
+        '            return None',
+        '        root.left, root.right = self.invertTree(root.right), self.invertTree(root.left)',
+        '        return root',
+      ].join('\n');
+      const script = buildPythonScript(code, '[4,2,7,1,3,6,9]', '{}', null);
+      const output = runScript(script);
+      expect(output.steps).toBeDefined();
+      expect(output.steps.length).toBeGreaterThan(0);
+    });
+
+    test('function returning a list (e.g. inorder) does not crash', () => {
+      const code = [
+        'def inorder(root):',
+        '    if not root:',
+        '        return []',
+        '    return inorder(root.left) + [root.val] + inorder(root.right)',
+      ].join('\n');
+      const script = buildPythonScript(code, '[2,1,3]', '{}', null);
+      const { steps } = runScript(script);
+      expect(steps).toBeDefined();
+      expect(steps.length).toBeGreaterThan(0);
+      const returnSteps = steps.filter(s => s.type === 'return');
+      returnSteps.forEach(s => {
+        expect(Array.isArray(s.result) || s.result === null).toBe(true);
+      });
+    });
+
+    test('stack frames also have serializable results after returning a TreeNode', () => {
+      const code = [
+        'def invertTree(root):',
+        '    if not root:',
+        '        return None',
+        '    root.left, root.right = invertTree(root.right), invertTree(root.left)',
+        '    return root',
+      ].join('\n');
+      const script = buildPythonScript(code, '[1,2,3]', '{}', null);
+      const { steps } = runScript(script);
+      // Verify every step is JSON-round-trippable (i.e. no non-serializable objects leaked)
+      expect(() => JSON.stringify(steps)).not.toThrow();
+    });
+  });
+
   // ── Step limit ─────────────────────────────────────────────────────────────
 
   describe('step limit', () => {

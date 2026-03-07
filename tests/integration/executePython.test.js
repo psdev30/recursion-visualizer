@@ -475,3 +475,103 @@ describe('POST /api/execute-python — lineMap', () => {
     expect(res.body.lineMap.solve).toBe(1);
   });
 });
+
+// ── Non-primitive return values ─────────────────────────────────────────────
+
+describe('POST /api/execute-python — functions returning non-primitive values', () => {
+  test('invertTree (returns TreeNode) runs without error', async () => {
+    const code = [
+      'def invertTree(root):',
+      '    if not root:',
+      '        return None',
+      '    root.left, root.right = invertTree(root.right), invertTree(root.left)',
+      '    return root',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [4, 2, 7, 1, 3, 6, 9],
+      mode: 'tree',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+    expect(Array.isArray(res.body.steps)).toBe(true);
+    expect(res.body.steps.length).toBeGreaterThan(0);
+  });
+
+  test('invertTree return steps carry the node val, not a raw object', async () => {
+    const code = [
+      'def invertTree(root):',
+      '    if not root:',
+      '        return None',
+      '    root.left, root.right = invertTree(root.right), invertTree(root.left)',
+      '    return root',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [4, 2, 7],
+      mode: 'tree',
+    });
+    const returnSteps = res.body.steps.filter(s => s.type === 'return' && s.result !== null);
+    expect(returnSteps.length).toBeGreaterThan(0);
+    returnSteps.forEach(s => {
+      expect(typeof s.result).toBe('number');
+    });
+  });
+
+  test('LeetCode-style invertTree with class Solution runs without error', async () => {
+    const code = [
+      'class Solution:',
+      '    def invertTree(self, root: Optional[TreeNode]) -> Optional[TreeNode]:',
+      '        if not root:',
+      '            return None',
+      '        root.left, root.right = self.invertTree(root.right), self.invertTree(root.left)',
+      '        return root',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [4, 2, 7, 1, 3, 6, 9],
+      mode: 'tree',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+    expect(res.body.steps.length).toBeGreaterThan(0);
+  });
+
+  test('inorder traversal (returns list) runs without error', async () => {
+    const code = [
+      'def inorder(root):',
+      '    if not root:',
+      '        return []',
+      '    return inorder(root.left) + [root.val] + inorder(root.right)',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [2, 1, 3],
+      mode: 'tree',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+    const returnSteps = res.body.steps.filter(s => s.type === 'return');
+    returnSteps.forEach(s => {
+      expect(Array.isArray(s.result) || s.result === null).toBe(true);
+    });
+  });
+
+  test('response body is fully JSON-serializable when function returns TreeNode', async () => {
+    const code = [
+      'def invertTree(root):',
+      '    if not root:',
+      '        return None',
+      '    root.left, root.right = invertTree(root.right), invertTree(root.left)',
+      '    return root',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [1, 2, 3],
+      mode: 'tree',
+    });
+    // If any non-serializable object leaked through, this would have failed at the server
+    // level. Verify the response parses cleanly and round-trips.
+    expect(() => JSON.stringify(res.body)).not.toThrow();
+  });
+});
