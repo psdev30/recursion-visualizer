@@ -547,6 +547,12 @@
         .tree-node.completed circle {
             opacity: 0.5;
         }
+        .tree-node.waiting circle {
+            stroke: #ffcb6b;
+            stroke-width: 2.5;
+            stroke-dasharray: 6 3;
+            opacity: 0.75;
+        }
         .null-node {
             opacity: 0;
             transition: opacity 0.3s ease;
@@ -2796,19 +2802,32 @@
                 if (tree2Layout) allLayouts.push(tree2Layout);
 
                 // Update tree nodes for all layouts
+                // Collect "waiting" nodes: in the call stack but not the top frame
+                const waitingNodes = new Set();
+                if (step.stack.length > 1) {
+                    for (let i = 0; i < step.stack.length - 1; i++) {
+                        const frame = step.stack[i];
+                        if (frame.nodeId !== null && frame.nodeId !== undefined) waitingNodes.add(frame.nodeId);
+                        if (frame.nodeId2 !== null && frame.nodeId2 !== undefined) waitingNodes.add(frame.nodeId2);
+                    }
+                }
+
                 allLayouts.forEach(layout => {
                     layout.nodes.forEach(n => {
                         const nodeEl = document.getElementById(`node-${n.id}`);
                         if (nodeEl) {
-                            nodeEl.classList.remove('active', 'returning', 'completed');
+                            nodeEl.classList.remove('active', 'returning', 'completed', 'waiting');
 
                             const isActive = (step.activeNode === n.id || step.activeNode2 === n.id) && step.type === 'call';
                             const isReturning = (step.returningNode === n.id || step.returningNode2 === n.id) && step.type === 'return';
+                            const isWaiting = waitingNodes.has(n.id) && !isActive && !isReturning && !completedNodes.has(n.id);
 
                             if (isActive) {
                                 nodeEl.classList.add('active');
                             } else if (isReturning) {
                                 nodeEl.classList.add('returning');
+                            } else if (isWaiting) {
+                                nodeEl.classList.add('waiting');
                             } else if (completedNodes.has(n.id)) {
                                 nodeEl.classList.add('completed');
                             }
