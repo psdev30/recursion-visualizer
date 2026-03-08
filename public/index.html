@@ -1448,7 +1448,15 @@
             
             return root;
         }
-        
+
+        function buildTreeFromSnapshot(snap) {
+            if (!snap) return null;
+            const node = new TreeNode(snap.val, snap.id);
+            node.left = buildTreeFromSnapshot(snap.left);
+            node.right = buildTreeFromSnapshot(snap.right);
+            return node;
+        }
+
         // Calculate tree positions
         function calculatePositions(root) {
             if (!root) return { nodes: [], edges: [], nullPositions: [], width: 0, height: 0 };
@@ -1530,6 +1538,7 @@
         let isPlaying = false;
         let playInterval = null;
         let completedNodes = new Map(); // nodeId -> return value
+        let lastTreeSnapshotKey = null;
         let visitedGraphNodes = new Set();
 
         // Helper to execute Python on server
@@ -2162,6 +2171,7 @@
                 resetBtn.disabled = false;
 
                 // Render primary visualization
+                lastTreeSnapshotKey = null;
                 if (currentMode === 'tree') {
                     renderTree();
                 } else if (currentMode === 'graph') {
@@ -2371,8 +2381,8 @@
 
             // Nodes
             const colors = ['#7fc8f8', '#82aaff', '#c792ea', '#f78c6c', '#c3e88d', '#ffcb6b', '#ff7eb6'];
-            nodes.forEach((n, i) => {
-                const color = colors[i % colors.length];
+            nodes.forEach((n) => {
+                const color = colors[n.id % colors.length];
                 // Store offset positions on nodes for updateVisualization
                 n._renderX = n.x + offsetX;
                 n._renderY = n.y + offsetY;
@@ -2800,6 +2810,22 @@
 
             // === MODE-SPECIFIC PRIMARY VIZ ===
             if (currentMode === 'tree' && treeLayout) {
+                // Re-render tree if structure has mutated (e.g. invertTree swapping children)
+                if (step.treeSnapshot) {
+                    const snapKey = JSON.stringify(step.treeSnapshot);
+                    if (snapKey !== lastTreeSnapshotKey) {
+                        lastTreeSnapshotKey = snapKey;
+                        const newTree = buildTreeFromSnapshot(step.treeSnapshot);
+                        treeLayout = calculatePositions(newTree);
+                        const { width, height } = treeLayout;
+                        const padTop = 20;
+                        treeSvg.setAttribute('viewBox', `0 -${padTop} ${width} ${height + padTop}`);
+                        treeSvg.style.width = `${Math.min(width, 500)}px`;
+                        treeSvg.style.height = `${Math.min(height + padTop, 400)}px`;
+                        treeSvg.innerHTML = renderSingleTree(treeLayout, 0, 0);
+                    }
+                }
+
                 // Collect all layouts to process
                 const allLayouts = [treeLayout];
                 if (tree2Layout) allLayouts.push(tree2Layout);
