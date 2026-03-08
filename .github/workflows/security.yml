@@ -1,0 +1,77 @@
+name: Security
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    # Re-scan every Monday at 08:00 UTC to catch newly published advisories
+    - cron: '0 8 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  # ── 1. Dependency audit ──────────────────────────────────────────────────
+  # Fails the pipeline on any high or critical npm advisory.
+  # Moderate/low advisories are surfaced in the log but do not block.
+  audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit for high/critical vulnerabilities
+        run: npm audit --audit-level=high
+
+  # ── 2. Dependency review (PR-only) ──────────────────────────────────────
+  # Compares the dependency tree between the PR base and head.
+  # Blocks merging if any newly introduced package has a known vulnerability.
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: always
+
+  # ── 3. CodeQL static analysis ────────────────────────────────────────────
+  # Scans JavaScript for injection, path traversal, prototype pollution, XSS,
+  # and other OWASP-class issues. Results appear in the Security tab.
+  codeql:
+    name: CodeQL (JavaScript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # Use the security-extended query suite for broader coverage
+          queries: security-extended
+
+      # CodeQL scans JS/TS without a build step
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

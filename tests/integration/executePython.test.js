@@ -575,3 +575,164 @@ describe('POST /api/execute-python — functions returning non-primitive values'
     expect(() => JSON.stringify(res.body)).not.toThrow();
   });
 });
+
+// ── Breakpoint contract ─────────────────────────────────────────────────────
+// The frontend breakpoint feature resolves step.funcName via lineMap to a
+// 1-based line number, then checks if that line is in the user's breakpoint
+// set.  These tests verify the server upholds that contract across all modes.
+
+describe('POST /api/execute-python — breakpoint contract', () => {
+  test('tree mode: every step has a funcName string', async () => {
+    const code = [
+      'def maxDepth(root):',
+      '    if not root:',
+      '        return 0',
+      '    return 1 + maxDepth(root.left) + maxDepth(root.right)',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [1, 2, 3],
+      mode: 'tree',
+    });
+    expect(res.status).toBe(200);
+    res.body.steps.forEach(s => {
+      expect(typeof s.funcName).toBe('string');
+      expect(s.funcName.length).toBeGreaterThan(0);
+    });
+  });
+
+  test('tree mode: every step\'s funcName resolves to a lineMap entry', async () => {
+    const code = [
+      'def maxDepth(root):',
+      '    if not root:',
+      '        return 0',
+      '    return 1 + maxDepth(root.left) + maxDepth(root.right)',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [3, 9, 20],
+      mode: 'tree',
+    });
+    const { steps, lineMap } = res.body;
+    steps.forEach(s => {
+      expect(lineMap[s.funcName]).toBeDefined();
+      expect(typeof lineMap[s.funcName]).toBe('number');
+    });
+  });
+
+  test('tree mode: multi-function code — each function\'s steps map to its own def line', async () => {
+    // helper is defined on line 1, solve on line 4.
+    // A breakpoint on line 1 should match helper steps; line 4 should match solve steps.
+    const code = [
+      'def helper(root):',          // line 1
+      '    if not root:',
+      '        return 0',
+      'def solve(root):',           // line 4
+      '    return helper(root)',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [1],
+      mode: 'tree',
+    });
+    const { steps, lineMap } = res.body;
+    expect(lineMap.helper).toBe(1);
+    expect(lineMap.solve).toBe(4);
+
+    const helperSteps = steps.filter(s => s.funcName === 'helper');
+    const solveSteps  = steps.filter(s => s.funcName === 'solve');
+    expect(helperSteps.length).toBeGreaterThan(0);
+    expect(solveSteps.length).toBeGreaterThan(0);
+
+    // Simulate: breakpoint on line 1 hits only helper, not solve
+    const bpLine1 = new Set([1]);
+    helperSteps.forEach(s => expect(bpLine1.has(lineMap[s.funcName])).toBe(true));
+    solveSteps.forEach(s  => expect(bpLine1.has(lineMap[s.funcName])).toBe(false));
+  });
+
+  test('graph mode: every step has a funcName that maps to lineMap', async () => {
+    const code = [
+      'def dfs(node, graph, visited):',
+      '    if node in visited:',
+      '        return',
+      '    visited.add(node)',
+      '    for n in graph.get(node, []):',
+      '        dfs(n, graph, visited)',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      graph: { 0: [1], 1: [] },
+      startNode: 0,
+      mode: 'graph',
+    });
+    const { steps, lineMap } = res.body;
+    expect(lineMap.dfs).toBe(1);
+    steps.forEach(s => {
+      expect(lineMap[s.funcName]).toBeDefined();
+    });
+  });
+
+  test('backtrack mode: every step has a funcName that maps to lineMap', async () => {
+    const code = [
+      'def backtrack(candidates, target, path):',
+      '    if target == 0:',
+      '        return',
+      '    for c in candidates:',
+      '        if c <= target:',
+      '            path.append(c)',
+      '            backtrack(candidates, target - c, path)',
+      '            path.pop()',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      candidates: [2],
+      target: 2,
+      mode: 'backtrack',
+    });
+    const { steps, lineMap } = res.body;
+    expect(lineMap.backtrack).toBe(1);
+    steps.forEach(s => {
+      expect(lineMap[s.funcName]).toBeDefined();
+    });
+  });
+
+  test('two-tree mode: every step\'s funcName resolves to lineMap', async () => {
+    const code = [
+      'def isSameTree(p, q):',
+      '    if not p and not q:',
+      '        return True',
+      '    if not p or not q:',
+      '        return False',
+      '    return p.val == q.val and isSameTree(p.left, q.left) and isSameTree(p.right, q.right)',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [1, 2],
+      tree2: [1, 2],
+      mode: 'tree',
+    });
+    const { steps, lineMap } = res.body;
+    expect(lineMap.isSameTree).toBe(1);
+    steps.forEach(s => {
+      expect(lineMap[s.funcName]).toBeDefined();
+    });
+  });
+
+  test('lineMap line numbers are 1-based positive integers', async () => {
+    const code = [
+      'def solve(root):',
+      '    if not root:',
+      '        return 0',
+      '    return 1 + solve(root.left) + solve(root.right)',
+    ].join('\n');
+    const res = await request(server).post('/api/execute-python').send({
+      code,
+      tree: [1, 2, 3],
+      mode: 'tree',
+    });
+    Object.values(res.body.lineMap).forEach(lineNum => {
+      expect(Number.isInteger(lineNum)).toBe(true);
+      expect(lineNum).toBeGreaterThanOrEqual(1);
+    });
+  });
+});

@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # npm dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: America/Los_Angeles
+    # Group all non-breaking updates into one PR to reduce noise
+    groups:
+      dependencies:
+        patterns: ['*']
+    # Always open a dedicated PR for security updates so they are easy to find
+    open-pull-requests-limit: 10
+
+  # GitHub Actions themselves
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: America/Los_Angeles
+    groups:
+      github-actions:
+        patterns: ['*']
+    open-pull-requests-limit: 5

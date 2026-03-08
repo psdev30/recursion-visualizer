@@ -852,6 +852,31 @@
         .code-line.active-return .code-line-text {
             color: var(--accent-green);
         }
+        /* Breakpoint indicators in code-highlight-view */
+        .code-line.has-breakpoint .code-line-num {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .code-line.has-breakpoint {
+            background: rgba(231, 76, 60, 0.07);
+        }
+        .code-line.has-breakpoint.active-call {
+            background: rgba(127, 200, 248, 0.18);
+        }
+        .code-line.has-breakpoint.active-return {
+            background: rgba(195, 232, 141, 0.18);
+        }
+        /* CodeMirror breakpoint gutter */
+        .CodeMirror .breakpoints { width: 14px; }
+        .cm-bp-marker {
+            color: #e74c3c;
+            font-size: 11px;
+            width: 14px;
+            text-align: center;
+            cursor: default;
+            display: block;
+            line-height: inherit;
+        }
 
         /* Call tree viz */
         .call-tree-viz {
@@ -1214,6 +1239,7 @@
                 <button class="btn" id="prevBtn" disabled>← Prev</button>
                 <button class="btn primary" id="nextBtn" disabled>Next →</button>
                 <button class="btn" id="resetBtn" disabled>Reset</button>
+                <button class="btn" id="continueBtn" disabled title="Continue to next breakpoint (F8)">⏭ Continue</button>
                 <div class="speed-control">
                     <span>Speed:</span>
                     <input type="range" class="speed-slider" id="speedSlider" min="1" max="10" value="5">
@@ -1569,6 +1595,7 @@
             mode: 'python',
             theme: localStorage.getItem('rv-theme') === 'light' ? 'eclipse' : 'monokai',
             lineNumbers: true,
+            gutters: ['CodeMirror-linenumbers', 'breakpoints'],
             indentUnit: 4,
             tabSize: 4,
             indentWithTabs: false,
@@ -1583,12 +1610,65 @@
             }
         });
 
+        cmEditor.on('gutterClick', (cm, lineNum0) => {
+            toggleBreakpoint(lineNum0 + 1); // CodeMirror is 0-based; we store 1-based
+        });
+
         const runBtn = document.getElementById('runBtn');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
         const playBtn = document.getElementById('playBtn');
         const resetBtn = document.getElementById('resetBtn');
+        const continueBtn = document.getElementById('continueBtn');
         const speedSlider = document.getElementById('speedSlider');
+
+        // ======== Breakpoints ========
+        const breakpoints = new Set(); // 1-based line numbers
+
+        function makeBreakpointMarker() {
+            const el = document.createElement('span');
+            el.className = 'cm-bp-marker';
+            el.textContent = '●';
+            return el;
+        }
+
+        function toggleBreakpoint(lineNum1) {
+            if (breakpoints.has(lineNum1)) {
+                breakpoints.delete(lineNum1);
+                cmEditor.setGutterMarker(lineNum1 - 1, 'breakpoints', null);
+            } else {
+                breakpoints.add(lineNum1);
+                cmEditor.setGutterMarker(lineNum1 - 1, 'breakpoints', makeBreakpointMarker());
+            }
+            const lineEl = document.getElementById(`code-line-${lineNum1}`);
+            if (lineEl) lineEl.classList.toggle('has-breakpoint', breakpoints.has(lineNum1));
+            updateContinueBtn();
+        }
+
+        function updateContinueBtn() {
+            continueBtn.disabled = !tracer || breakpoints.size === 0 || currentStep >= tracer.steps.length - 1;
+        }
+
+        function stepHitsBreakpoint(stepIdx) {
+            if (breakpoints.size === 0 || !lineMap) return false;
+            const step = tracer.steps[stepIdx];
+            const lineNum = lineMap[step.funcName];
+            return lineNum !== undefined && breakpoints.has(lineNum);
+        }
+
+        function jumpToStep(targetStep) {
+            // Rebuild completedNodes for all return steps before targetStep
+            completedNodes.clear();
+            for (let i = 0; i < targetStep; i++) {
+                const s = tracer.steps[i];
+                if (s.type === 'return') {
+                    if (s.nodeId !== undefined && s.nodeId !== null) completedNodes.set(s.nodeId, s.result);
+                    if (s.nodeId2 !== undefined) completedNodes.set(s.nodeId2, s.result);
+                }
+            }
+            currentStep = targetStep;
+            updateVisualization();
+        }
         const stepNum = document.getElementById('stepNum');
         const totalSteps = document.getElementById('totalSteps');
         const treeSvg = document.getElementById('treeSvg');
@@ -1627,6 +1707,7 @@
             nextBtn.disabled = true;
             playBtn.disabled = true;
             resetBtn.disabled = true;
+            continueBtn.disabled = true;
             stepNum.textContent = '0';
             totalSteps.textContent = '0';
             document.getElementById('primaryVizTitle').textContent = 'Tree';
@@ -2169,6 +2250,7 @@
                 nextBtn.disabled = false;
                 playBtn.disabled = false;
                 resetBtn.disabled = false;
+                updateContinueBtn();
 
                 // Render primary visualization
                 lastTreeSnapshotKey = null;
@@ -2274,6 +2356,7 @@
                 nextBtn.disabled = true;
                 playBtn.disabled = true;
                 resetBtn.disabled = true;
+                continueBtn.disabled = true;
                 stepNum.textContent = '0';
                 totalSteps.textContent = '0';
 
@@ -2756,7 +2839,8 @@
 
             const lines = code.split('\n');
             container.innerHTML = lines.map((line, i) => {
-                return `<div class="code-line" id="code-line-${i + 1}">
+                const hasBp = breakpoints.has(i + 1) ? ' has-breakpoint' : '';
+                return `<div class="code-line${hasBp}" id="code-line-${i + 1}">
                     <span class="code-line-num">${i + 1}</span>
                     <span class="code-line-text">${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
                 </div>`;
@@ -2792,6 +2876,7 @@
             // Update buttons
             prevBtn.disabled = currentStep === 0;
             nextBtn.disabled = currentStep === tracer.steps.length - 1;
+            updateContinueBtn();
 
             // Update primary viz title
             const titleEl = document.getElementById('primaryVizTitle');
@@ -3159,6 +3244,10 @@
                 if (currentStep < tracer.steps.length - 1) {
                     currentStep++;
                     updateVisualization();
+                    if (breakpoints.size > 0 && stepHitsBreakpoint(currentStep)) {
+                        stopPlaying();
+                        return;
+                    }
                     playInterval = setTimeout(tick, getSpeed());
                 } else {
                     stopPlaying();
@@ -3193,6 +3282,19 @@
             visitedGraphNodes.clear();
             updateVisualization();
         });
+
+        continueBtn.addEventListener('click', () => {
+            if (!tracer || breakpoints.size === 0) return;
+            stopPlaying();
+            for (let i = currentStep + 1; i < tracer.steps.length; i++) {
+                if (stepHitsBreakpoint(i)) {
+                    jumpToStep(i);
+                    return;
+                }
+            }
+            // No further breakpoint — jump to last step
+            jumpToStep(tracer.steps.length - 1);
+        });
         
         // Keyboard navigation
         document.addEventListener('keydown', (e) => {
@@ -3212,6 +3314,9 @@
                 if (!playBtn.disabled) playBtn.click();
             } else if (e.key === 'r' || e.key === 'R') {
                 if (!resetBtn.disabled) resetBtn.click();
+            } else if (e.key === 'F8') {
+                e.preventDefault();
+                if (!continueBtn.disabled) continueBtn.click();
             }
         });
         
