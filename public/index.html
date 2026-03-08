@@ -1304,6 +1304,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/python/python.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/closebrackets.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/comment/comment.min.js"></script>
 
     <script>
         // API base URL - change this if deploying elsewhere
@@ -1568,6 +1569,8 @@
             extraKeys: {
                 'Ctrl-Enter': () => runVisualization(),
                 'Cmd-Enter':  () => runVisualization(),
+                'Cmd-/':      'toggleComment',
+                'Ctrl-/':     'toggleComment',
             }
         });
 
