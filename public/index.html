@@ -1147,6 +1147,7 @@
                     <button class="mode-btn active" data-mode="tree">Tree</button>
                     <button class="mode-btn" data-mode="graph">Graph</button>
                     <button class="mode-btn" data-mode="backtrack">Backtracking</button>
+                    <button class="mode-btn" data-mode="buildtree">Build Tree</button>
                     <button class="mode-btn" data-mode="visualize">Visualize</button>
                     <button class="mode-default-btn" id="setDefaultModeBtn" title="Set current mode as default">⭐ Set Default</button>
                 </div>
@@ -1179,6 +1180,12 @@
                 <div class="help-text" style="margin-bottom: 6px;">Candidates array (JSON)</div>
                 <input class="tree-input" id="backtrackTarget" placeholder="Target value, e.g. 7" value="7">
                 <div class="help-text">Target or constraint value</div>
+            </div>
+
+            <div class="editor-section" draggable="true" id="buildtreeInputSection" style="display:none;">
+                <div class="section-title"><span class="drag-handle">⠿</span>Function Arguments</div>
+                <textarea class="tree-input" id="buildtreeArgs" rows="3" placeholder='{"preorder": [3,9,20,15,7], "inorder": [9,3,15,20,7]}'>{"preorder": [3,9,20,15,7], "inorder": [9,3,15,20,7]}</textarea>
+                <div class="help-text">JSON object — keys are parameter names, values are their arguments.</div>
             </div>
 
             <div class="editor-section" draggable="true" id="visualizeInputSection" style="display:none;">
@@ -1770,6 +1777,17 @@
                        The function receives (candidates, target, path, globals) — no preprocessing applied.<br>
                        Use <code>globals["varName"]</code> for tracked variables`;
                 }
+            } else if (mode === 'buildtree') {
+                if (isLeetCodeMode) {
+                    helpEl.innerHTML = `Function params are matched from the args JSON keys<br>
+                       <code>TreeNode(val)</code> is available — IDs assigned automatically<br>
+                       Use <code>globals["varName"]</code> for tracked variables`;
+                } else {
+                    helpEl.innerHTML = `Write a recursive function that constructs a tree.<br>
+                       <code>TreeNode(val)</code> is available — IDs assigned automatically.<br>
+                       Function params are matched from the args JSON keys.<br>
+                       Use <code>globals["varName"]</code> for tracked variables`;
+                }
             } else if (mode === 'visualize') {
                 // No help text needed
             } else {
@@ -1797,6 +1815,7 @@
             document.getElementById('treeInputSection').style.display = mode === 'tree' ? '' : 'none';
             document.getElementById('graphInputSection').style.display = mode === 'graph' ? '' : 'none';
             document.getElementById('backtrackInputSection').style.display = mode === 'backtrack' ? '' : 'none';
+            document.getElementById('buildtreeInputSection').style.display = mode === 'buildtree' ? '' : 'none';
             document.getElementById('visualizeInputSection').style.display = mode === 'visualize' ? '' : 'none';
 
             // Hide code/globals sections in visualize mode
@@ -1862,6 +1881,8 @@
 
                     if (problemMode === 'graph') {
                         document.getElementById('graphInput').value = problem.tree;
+                    } else if (problemMode === 'buildtree') {
+                        document.getElementById('buildtreeArgs').value = problem.tree;
                     } else if (problemMode === 'backtrack') {
                         try {
                             const bt = JSON.parse(problem.tree);
@@ -1948,6 +1969,8 @@
                 inputData = document.getElementById('graphInput').value;
             } else if (currentMode === 'backtrack') {
                 inputData = JSON.stringify({ candidates: document.getElementById('backtrackCandidates').value, target: document.getElementById('backtrackTarget').value });
+            } else if (currentMode === 'buildtree') {
+                inputData = document.getElementById('buildtreeArgs').value;
             } else if (currentMode === 'tree' && isTwoTreeMode) {
                 inputData = JSON.stringify({ tree1: treeInput.value, tree2: document.getElementById('treeInput2').value });
             }
@@ -2238,6 +2261,23 @@
                         runBtn.textContent = '▶ Run Visualization';
                         runBtn.disabled = false;
                     }
+                } else if (currentMode === 'buildtree') {
+                    const args = JSON.parse(document.getElementById('buildtreeArgs').value);
+                    tree = null;
+                    tree2 = null;
+                    treeLayout = null;
+                    tree2Layout = null;
+                    graphLayout = null;
+
+                    runBtn.textContent = '⏳ Running...';
+                    runBtn.disabled = true;
+                    try {
+                        const result = await executePython({ code, args, globals, mode: 'buildtree', leetcode: isLeetCodeMode });
+                        tracer = { steps: result.steps, lineMap: result.lineMap, buildTree: true };
+                    } finally {
+                        runBtn.textContent = '▶ Run Visualization';
+                        runBtn.disabled = false;
+                    }
                 }
 
                 currentStep = 0;
@@ -2261,6 +2301,12 @@
                     renderGraph();
                 } else if (currentMode === 'backtrack') {
                     renderDecisionTree();
+                } else if (currentMode === 'buildtree') {
+                    // Start with empty tree — will be built from treeSnapshot in updateVisualization
+                    treeSvg.innerHTML = '';
+                    treeSvg.setAttribute('viewBox', '0 0 100 100');
+                    treeSvg.style.width = '100px';
+                    treeSvg.style.height = '100px';
                 }
 
                 // Compute complexity stats
@@ -2883,6 +2929,7 @@
             const titleEl = document.getElementById('primaryVizTitle');
             if (currentMode === 'graph') titleEl.textContent = 'Graph';
             else if (currentMode === 'backtrack') titleEl.textContent = 'Decision Tree';
+            else if (currentMode === 'buildtree') titleEl.textContent = 'Constructed Tree';
             else titleEl.textContent = tree2Layout ? 'Trees (p, q)' : 'Tree';
 
             // Track completed nodes with their return values
@@ -3056,6 +3103,42 @@
                         treeSvg.appendChild(g);
                     });
                 });
+            } else if (currentMode === 'buildtree') {
+                // Build tree mode: rebuild tree from treeSnapshot on each step
+                if (step.treeSnapshot) {
+                    const snapKey = JSON.stringify(step.treeSnapshot);
+                    if (snapKey !== lastTreeSnapshotKey) {
+                        lastTreeSnapshotKey = snapKey;
+                        const newTree = buildTreeFromSnapshot(step.treeSnapshot);
+                        treeLayout = calculatePositions(newTree);
+                        const { width, height } = treeLayout;
+                        const padTop = 40;
+                        treeSvg.setAttribute('viewBox', `0 -${padTop} ${width} ${height + padTop}`);
+                        treeSvg.style.width = `${Math.min(width, 500)}px`;
+                        treeSvg.style.height = `${Math.min(height + padTop, 400)}px`;
+                        treeSvg.innerHTML = renderSingleTree(treeLayout, 0, 0);
+                    }
+
+                    // Color tree nodes — show which node was just created
+                    if (treeLayout) {
+                        treeLayout.nodes.forEach(n => {
+                            const nodeEl = document.getElementById(`node-${n.id}`);
+                            if (nodeEl) {
+                                nodeEl.classList.remove('active', 'returning', 'completed');
+                                if (completedNodes.has(n.id)) {
+                                    nodeEl.classList.add('completed');
+                                }
+                            }
+                        });
+                    }
+                } else {
+                    // No tree yet (null snapshot) — clear the SVG
+                    if (lastTreeSnapshotKey !== 'null') {
+                        lastTreeSnapshotKey = 'null';
+                        treeSvg.innerHTML = '';
+                        treeLayout = null;
+                    }
+                }
             } else if (currentMode === 'graph' && graphLayout) {
                 // Update graph nodes
                 visitedGraphNodes.clear();
@@ -3488,6 +3571,8 @@
             } else if (currentMode === 'backtrack') {
                 state.candidates = document.getElementById('backtrackCandidates').value;
                 state.target = document.getElementById('backtrackTarget').value;
+            } else if (currentMode === 'buildtree') {
+                state.args = document.getElementById('buildtreeArgs').value;
             }
             return state;
         }
@@ -3509,6 +3594,8 @@
             } else if (state.mode === 'backtrack') {
                 document.getElementById('backtrackCandidates').value = state.candidates || '';
                 document.getElementById('backtrackTarget').value = state.target || '';
+            } else if (state.mode === 'buildtree') {
+                document.getElementById('buildtreeArgs').value = state.args || '';
             }
         }
 
