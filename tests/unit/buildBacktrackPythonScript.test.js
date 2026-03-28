@@ -71,9 +71,10 @@ describe('buildBacktrackPythonScript', () => {
       expect(script).toContain('def _original_backtrack(');
     });
 
-    test('generates _wrapped_ function with call_id tracking', () => {
+    test('generates inline wrapper function with call_id tracking', () => {
       const script = buildBacktrackPythonScript(baseCode, '[2,3]', 5, '{}');
-      expect(script).toContain('def _wrapped_backtrack(');
+      // Inline wrapper uses the original function name (not _wrapped_)
+      expect(script).toMatch(/def backtrack\([^)]*\):\s*\n\s*_call_id\[0\] \+= 1/);
       expect(script).toContain('_call_id[0] += 1');
     });
 
@@ -175,7 +176,7 @@ describe('buildBacktrackPythonScript', () => {
       }
     });
 
-    test('handles LeetCode-style class code', () => {
+    test('handles LeetCode-style class code with nested functions', () => {
       const code = [
         'class Solution:',
         '    def combinationSum(self, candidates, target):',
@@ -192,12 +193,19 @@ describe('buildBacktrackPythonScript', () => {
         '        backtrack(0, [], target)',
         '        return results',
       ].join('\n');
-      // Note: nested `def backtrack` inside `combinationSum` — first def is combinationSum
       const script = buildBacktrackPythonScript(code, '[2,3,6,7]', 7, '{}');
       const output = runScript(script);
-      // combinationSum is the main function (no candidates/target/path params after processing)
-      // This may produce an error since params don't match — document behavior
-      expect(output).toBeDefined();
+
+      expect(output.steps).toBeDefined();
+      expect(output.steps.length).toBeGreaterThan(2);
+
+      // Should trace both the outer combinationSum and inner backtrack calls
+      const funcNames = new Set(output.steps.map(s => s.funcName));
+      expect(funcNames.has('backtrack')).toBe(true);
+
+      // Backtrack calls should have meaningful labels (not just "4")
+      const btCalls = output.steps.filter(s => s.type === 'call' && s.funcName === 'backtrack');
+      expect(btCalls.length).toBeGreaterThan(1);
     });
 
     test('globals are included in each step', () => {
