@@ -594,6 +594,17 @@
             opacity: 0.8;
             stroke: var(--accent);
         }
+        .null-node.swap-left {
+            animation: null-swap-move 0.45s ease-in-out forwards;
+        }
+        .null-node.swap-right {
+            animation: null-swap-move 0.45s ease-in-out forwards;
+        }
+        @keyframes null-swap-move {
+            0% { transform: translate(0, 0); }
+            50% { transform: translate(var(--swap-dx), -18px); }
+            100% { transform: translate(var(--swap-dx), 0); }
+        }
         .return-label text {
             font-family: 'Monaco', monospace;
             font-size: 11px;
@@ -858,11 +869,24 @@
         .code-line.has-breakpoint {
             background: rgba(231, 76, 60, 0.07);
         }
+        .code-line.active-line {
+            background: rgba(255, 203, 107, 0.18);
+        }
+        .code-line.active-line .code-line-text {
+            color: #ffcb6b;
+        }
+        .code-line.active-line .code-line-num {
+            color: #ffcb6b;
+            font-weight: bold;
+        }
         .code-line.has-breakpoint.active-call {
             background: rgba(127, 200, 248, 0.18);
         }
         .code-line.has-breakpoint.active-return {
             background: rgba(195, 232, 141, 0.18);
+        }
+        .code-line.has-breakpoint.active-line {
+            background: rgba(255, 203, 107, 0.22);
         }
         /* CodeMirror breakpoint gutter */
         .CodeMirror .breakpoints { width: 14px; }
@@ -1655,9 +1679,9 @@
         }
 
         function stepHitsBreakpoint(stepIdx) {
-            if (breakpoints.size === 0 || !lineMap) return false;
+            if (breakpoints.size === 0) return false;
             const step = tracer.steps[stepIdx];
-            const lineNum = lineMap[step.funcName];
+            const lineNum = step.lineNumber != null ? step.lineNumber : (lineMap && lineMap[step.funcName]);
             return lineNum !== undefined && breakpoints.has(lineNum);
         }
 
@@ -2892,17 +2916,19 @@
         }
 
         function updateCodeHighlight(step) {
-            if (!step || !lineMap) return;
+            if (!step) return;
             // Clear all highlights
             document.querySelectorAll('.code-line').forEach(el => {
-                el.classList.remove('active-call', 'active-return');
+                el.classList.remove('active-call', 'active-return', 'active-line');
             });
-            // Highlight the line for the current function
-            const lineNum = lineMap[step.funcName];
+            // Use per-line lineNumber if available, fall back to lineMap
+            const lineNum = step.lineNumber != null ? step.lineNumber : (lineMap && lineMap[step.funcName]);
             if (lineNum) {
                 const lineEl = document.getElementById(`code-line-${lineNum}`);
                 if (lineEl) {
-                    lineEl.classList.add(step.type === 'call' ? 'active-call' : 'active-return');
+                    if (step.type === 'call') lineEl.classList.add('active-call');
+                    else if (step.type === 'return') lineEl.classList.add('active-return');
+                    else lineEl.classList.add('active-line');
                     lineEl.scrollIntoView({ block: 'nearest' });
                 }
             }
@@ -2977,7 +3003,7 @@
                         if (nodeEl) {
                             nodeEl.classList.remove('active', 'returning', 'completed', 'waiting');
 
-                            const isActive = (step.activeNode === n.id || step.activeNode2 === n.id) && step.type === 'call';
+                            const isActive = (step.activeNode === n.id || step.activeNode2 === n.id) && (step.type === 'call' || step.type === 'line');
                             const isReturning = (step.returningNode === n.id || step.returningNode2 === n.id) && step.type === 'return';
                             const isWaiting = waitingNodes.has(n.id) && !isActive && !isReturning && !completedNodes.has(n.id);
 
@@ -3000,7 +3026,8 @@
                         const nullEl = document.getElementById(`null-${np.parentId}-${np.side}`);
                         const nullEdge = document.getElementById(`null-edge-${np.parentId}-${np.side}`);
                         if (!nullEl || !nullEdge) return;
-                        nullEl.classList.remove('active', 'visible');
+                        nullEl.classList.remove('active', 'visible', 'swap-left', 'swap-right');
+                        nullEl.style.removeProperty('--swap-dx');
                         nullEdge.classList.remove('active', 'visible');
                     });
                 });
@@ -3072,6 +3099,48 @@
                     if (el && !el.classList.contains('active')) el.classList.add('visible');
                     if (edge && !edge.classList.contains('active')) edge.classList.add('visible');
                 });
+
+                // Null-swap animation: when a line step has an active node whose
+                // both children are null and the tree snapshot hasn't changed,
+                // animate the two null circles crossing paths.
+                if (step.type === 'line' && step.activeNode != null) {
+                    const activeId = step.activeNode;
+                    const layout = (tree2Layout && activeId >= 1000) ? tree2Layout : treeLayout;
+                    const parentNulls = layout.nullPositions.filter(np => np.parentId === activeId);
+                    if (parentNulls.length === 2) {
+                        // Both children are null — check if tree snapshot unchanged
+                        const prevSnap = currentStep > 0 ? tracer.steps[currentStep - 1].treeSnapshot : null;
+                        const curSnap = step.treeSnapshot;
+                        const unchanged = prevSnap && curSnap && JSON.stringify(prevSnap) === JSON.stringify(curSnap);
+                        if (unchanged) {
+                            const leftNull = parentNulls.find(np => np.side === 'left');
+                            const rightNull = parentNulls.find(np => np.side === 'right');
+                            if (leftNull && rightNull) {
+                                const dx = rightNull.x - leftNull.x;
+                                const leftEl = document.getElementById(`null-${activeId}-left`);
+                                const rightEl = document.getElementById(`null-${activeId}-right`);
+                                if (leftEl && rightEl) {
+                                    // Make both visible and animate
+                                    leftEl.classList.add('active');
+                                    rightEl.classList.add('active');
+                                    const leftEdge = document.getElementById(`null-edge-${activeId}-left`);
+                                    const rightEdge = document.getElementById(`null-edge-${activeId}-right`);
+                                    if (leftEdge) leftEdge.classList.add('active');
+                                    if (rightEdge) rightEdge.classList.add('active');
+                                    // Remove previous swap classes
+                                    leftEl.classList.remove('swap-left', 'swap-right');
+                                    rightEl.classList.remove('swap-left', 'swap-right');
+                                    // Force reflow to restart animation
+                                    void leftEl.offsetWidth;
+                                    leftEl.style.setProperty('--swap-dx', `${dx}px`);
+                                    rightEl.style.setProperty('--swap-dx', `${-dx}px`);
+                                    leftEl.classList.add('swap-left');
+                                    rightEl.classList.add('swap-right');
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // Render return value labels on tree
                 treeSvg.querySelectorAll('.return-label').forEach(el => el.remove());

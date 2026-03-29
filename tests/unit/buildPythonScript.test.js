@@ -54,24 +54,26 @@ describe('buildPythonScript', () => {
 
     test('includes tracing infrastructure', () => {
       const script = buildPythonScript(baseCode, '[1,2,3]', '{}', null);
-      expect(script).toContain('_record_call');
-      expect(script).toContain('_record_return');
+      expect(script).toContain('_global_tracer');
+      expect(script).toContain('_local_tracer');
       expect(script).toContain('_MAX_STEPS = 2000');
     });
 
-    test('renames user function to _original_', () => {
+    test('includes user function in traced funcs set', () => {
       const script = buildPythonScript(baseCode, '[1]', '{}', null);
-      expect(script).toContain('def _original_solve(');
+      expect(script).toContain('"solve"');
+      expect(script).toContain('_TRACED_FUNCS');
     });
 
-    test('generates a _wrapped_ function', () => {
+    test('uses sys.settrace for tracing', () => {
       const script = buildPythonScript(baseCode, '[1]', '{}', null);
-      expect(script).toContain('def _wrapped_solve(');
+      expect(script).toContain('sys.settrace(_global_tracer)');
     });
 
-    test('rewires recursive calls to _wrapped_', () => {
+    test('does not rename or wrap user functions', () => {
       const script = buildPythonScript(baseCode, '[1]', '{}', null);
-      expect(script).toContain('_wrapped_solve(');
+      expect(script).not.toContain('_original_solve');
+      expect(script).not.toContain('_wrapped_solve');
     });
 
     test('sets recursion limit to 500', () => {
@@ -110,7 +112,7 @@ describe('buildPythonScript', () => {
       expect(output.steps.length).toBeGreaterThan(0);
     });
 
-    test('step types are "call" and "return"', () => {
+    test('step types are "call", "line", and "return"', () => {
       const code = [
         'def maxDepth(root):',
         '    if not root:',
@@ -122,10 +124,11 @@ describe('buildPythonScript', () => {
 
       const types = new Set(steps.map(s => s.type));
       expect(types.has('call')).toBe(true);
+      expect(types.has('line')).toBe(true);
       expect(types.has('return')).toBe(true);
     });
 
-    test('each step contains required fields', () => {
+    test('each step contains required fields including lineNumber', () => {
       const code = 'def solve(root):\n    if not root:\n        return 0\n    return solve(root.left) + solve(root.right)';
       const script = buildPythonScript(code, '[1,2,3]', '{}', null);
       const { steps } = runScript(script);
@@ -133,9 +136,12 @@ describe('buildPythonScript', () => {
       for (const step of steps) {
         expect(step).toHaveProperty('type');
         expect(step).toHaveProperty('funcName');
+        expect(step).toHaveProperty('lineNumber');
         expect(step).toHaveProperty('stack');
         expect(step).toHaveProperty('globals');
         expect(step).toHaveProperty('message');
+        expect(typeof step.lineNumber).toBe('number');
+        expect(step.lineNumber).toBeGreaterThan(0);
       }
     });
 
@@ -188,8 +194,8 @@ describe('buildPythonScript', () => {
     test('activates when tree2Json is provided and function has 2+ params', () => {
       const code = 'def isSameTree(p, q):\n    if not p and not q:\n        return True\n    if not p or not q:\n        return False\n    return p.val == q.val and isSameTree(p.left, q.left) and isSameTree(p.right, q.right)';
       const script = buildPythonScript(code, '[1,2,3]', '{}', '[1,2,3]');
-      expect(script).toContain('_record_call_2t');
-      expect(script).toContain('_record_return_2t');
+      expect(script).toContain('_TWO_TREE_FUNCS');
+      expect(script).toContain('"isSameTree"');
       expect(script).toContain('build_tree');
       // Both trees should be built
       expect(script).toContain('_tree1 = build_tree(');
@@ -207,13 +213,13 @@ describe('buildPythonScript', () => {
     test('does NOT activate when tree2Json is null even with 2+ params', () => {
       const code = 'def solve(p, q):\n    return 0';
       const script = buildPythonScript(code, '[1]', '{}', null);
-      expect(script).not.toContain('_record_call_2t');
+      expect(script).toContain('_TWO_TREE_FUNCS = set()');
     });
 
     test('does NOT activate when function has only 1 non-globals param', () => {
       const code = 'def solve(root):\n    return 0';
       const script = buildPythonScript(code, '[1]', '{}', '[2]');
-      expect(script).not.toContain('_record_call_2t');
+      expect(script).toContain('_TWO_TREE_FUNCS = set()');
     });
   });
 
@@ -294,12 +300,14 @@ describe('buildPythonScript', () => {
         '    return node.val if node else 0',
       ].join('\n');
       const script = buildPythonScript(code, '[1]', '{}', null);
-      expect(script).toContain('_wrapped_main(');
-      expect(script).toContain('def _original_main(');
-      expect(script).toContain('def _original_helper(');
+      // Main function should be called directly (not wrapped)
+      expect(script).toContain('main(_tree');
+      // Both functions should be in traced funcs
+      expect(script).toContain('"main"');
+      expect(script).toContain('"helper"');
     });
 
-    test('generates wrappers for all helper functions', () => {
+    test('all functions are included in traced funcs', () => {
       const code = [
         'def solve(root):',
         '    return helper(root)',
@@ -307,8 +315,9 @@ describe('buildPythonScript', () => {
         '    return 0',
       ].join('\n');
       const script = buildPythonScript(code, '[1]', '{}', null);
-      expect(script).toContain('def _wrapped_solve(');
-      expect(script).toContain('def _wrapped_helper(');
+      expect(script).toContain('_TRACED_FUNCS');
+      expect(script).toContain('"solve"');
+      expect(script).toContain('"helper"');
     });
   });
 

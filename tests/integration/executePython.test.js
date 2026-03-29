@@ -621,14 +621,15 @@ describe('POST /api/execute-python — breakpoint contract', () => {
   });
 
   test('tree mode: multi-function code — each function\'s steps map to its own def line', async () => {
-    // helper is defined on line 1, solve on line 4.
-    // A breakpoint on line 1 should match helper steps; line 4 should match solve steps.
+    // solve is defined on line 1 (entry point), helper on line 4.
+    // Both should produce steps, and each funcName maps to its own lineMap line.
     const code = [
-      'def helper(root):',          // line 1
+      'def solve(root):',            // line 1
       '    if not root:',
       '        return 0',
-      'def solve(root):',           // line 4
       '    return helper(root)',
+      'def helper(root):',           // line 5
+      '    return root.val',
     ].join('\n');
     const res = await request(server).post('/api/execute-python').send({
       code,
@@ -636,18 +637,17 @@ describe('POST /api/execute-python — breakpoint contract', () => {
       mode: 'tree',
     });
     const { steps, lineMap } = res.body;
-    expect(lineMap.helper).toBe(1);
-    expect(lineMap.solve).toBe(4);
+    expect(lineMap.solve).toBe(1);
+    expect(lineMap.helper).toBe(5);
 
-    const helperSteps = steps.filter(s => s.funcName === 'helper');
     const solveSteps  = steps.filter(s => s.funcName === 'solve');
-    expect(helperSteps.length).toBeGreaterThan(0);
+    const helperSteps = steps.filter(s => s.funcName === 'helper');
     expect(solveSteps.length).toBeGreaterThan(0);
+    expect(helperSteps.length).toBeGreaterThan(0);
 
-    // Simulate: breakpoint on line 1 hits only helper, not solve
-    const bpLine1 = new Set([1]);
-    helperSteps.forEach(s => expect(bpLine1.has(lineMap[s.funcName])).toBe(true));
-    solveSteps.forEach(s  => expect(bpLine1.has(lineMap[s.funcName])).toBe(false));
+    // With per-line stepping, each step has lineNumber — verify funcName-based lineMap still works
+    solveSteps.forEach(s => expect(lineMap[s.funcName]).toBe(1));
+    helperSteps.forEach(s => expect(lineMap[s.funcName]).toBe(5));
   });
 
   test('graph mode: every step has a funcName that maps to lineMap', async () => {
